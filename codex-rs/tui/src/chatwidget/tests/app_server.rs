@@ -77,6 +77,7 @@ fn start_safety_buffering_test_turn(
             thread_id: thread_id.to_string(),
             turn: AppServerTurn {
                 id: turn_id.to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::InProgress,
@@ -141,14 +142,15 @@ async fn safety_buffering_offers_one_retry_with_app_wording() {
     chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
     chat.handle_key_event(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
     chat.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-    let (event_thread_id, event_turn_id, model, turn) = loop {
+    let (event_thread_id, event_turn_id, model, turn, prompt) = loop {
         match rx.try_recv() {
             Ok(AppEvent::RetrySafetyBufferedTurn {
                 thread_id,
                 turn_id,
                 model,
                 turn,
-            }) => break (thread_id, turn_id, model, turn),
+                prompt,
+            }) => break (thread_id, turn_id, model, turn, prompt),
             Ok(_) => continue,
             Err(err) => panic!("expected safety-buffering retry event: {err}"),
         }
@@ -157,7 +159,77 @@ async fn safety_buffering_offers_one_retry_with_app_wording() {
     assert_eq!(event_turn_id, turn_id);
     assert_eq!(model, "faster-model");
     assert_matches!(turn, Op::UserTurn { .. });
+    assert_eq!(prompt, UserMessage::from("Explain the request"));
     assert!(!render_bottom_popup(&chat, /*width*/ 80).contains("Additional safety checks"));
+}
+
+#[tokio::test]
+async fn safety_buffered_retry_preparation_renders_identical_prompt_and_preserves_retry_state() {
+    let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let thread_id = ThreadId::new();
+    let prompt = UserMessage::from("Repeat this request");
+    chat.thread_id = Some(thread_id);
+
+    // Match the state of a newly attached branch whose last replayed prompt has the same display.
+    chat.submit_user_message(prompt.clone());
+    let turn = next_submit_op(&mut op_rx);
+    assert_eq!(drain_insert_history(&mut rx).len(), 1);
+    chat.clear_safety_buffering();
+    chat.input_queue.user_turn_pending_start = false;
+
+    chat.prepare_safety_buffered_retry_submission(prompt.clone());
+    assert!(drain_insert_history(&mut rx).is_empty());
+
+    let retry_turn_id = "retry-turn";
+    chat.record_safety_buffering_turn(retry_turn_id.to_string(), &turn);
+    chat.commit_safety_buffered_retry_submission(prompt);
+
+    let retry_rows = drain_insert_history(&mut rx);
+    assert_eq!(retry_rows.len(), 1);
+    assert!(lines_to_single_string(&retry_rows[0]).contains("Repeat this request"));
+
+    chat.handle_server_notification(
+        ServerNotification::TurnStarted(TurnStartedNotification {
+            thread_id: thread_id.to_string(),
+            turn: AppServerTurn {
+                id: retry_turn_id.to_string(),
+                is_forkable: true,
+                items_view: codex_app_server_protocol::TurnItemsView::Full,
+                items: Vec::new(),
+                status: AppServerTurnStatus::InProgress,
+                error: None,
+                started_at: Some(0),
+                completed_at: None,
+                duration_ms: None,
+            },
+        }),
+        /*replay_kind*/ None,
+    );
+    chat.handle_server_notification(
+        ServerNotification::ModelSafetyBufferingUpdated(safety_buffering_notification(
+            thread_id,
+            retry_turn_id,
+            Some("another-faster-model"),
+        )),
+        /*replay_kind*/ None,
+    );
+
+    assert!(chat.can_retry_safety_buffered_turn(retry_turn_id));
+    assert!(render_bottom_popup(&chat, /*width*/ 80).contains("Retry with a faster model"));
+}
+
+#[tokio::test]
+async fn cancelling_safety_buffered_retry_preparation_unblocks_input() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+
+    chat.prepare_safety_buffered_retry_submission(UserMessage::from("Retry me"));
+    assert!(chat.input_queue.user_turn_pending_start);
+    assert!(drain_insert_history(&mut rx).is_empty());
+
+    chat.cancel_safety_buffered_retry_submission();
+
+    assert!(!chat.input_queue.user_turn_pending_start);
+    assert!(drain_insert_history(&mut rx).is_empty());
 }
 
 #[tokio::test]
@@ -517,6 +589,7 @@ async fn live_app_server_turn_completed_clears_working_status_after_answer_item(
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::InProgress,
@@ -561,6 +634,7 @@ async fn live_app_server_turn_completed_clears_working_status_after_answer_item(
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::Completed,
@@ -586,6 +660,7 @@ async fn live_app_server_turn_started_sets_feedback_turn_id() {
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::InProgress,
@@ -946,6 +1021,7 @@ async fn live_app_server_failed_turn_does_not_duplicate_error_history() {
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::InProgress,
@@ -981,6 +1057,7 @@ async fn live_app_server_failed_turn_does_not_duplicate_error_history() {
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::Failed,
@@ -1044,6 +1121,7 @@ async fn live_app_server_stream_recovery_restores_previous_status_header() {
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::InProgress,
@@ -1102,6 +1180,7 @@ async fn live_app_server_server_overloaded_error_renders_warning() {
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::InProgress,
@@ -1144,6 +1223,7 @@ async fn live_app_server_cyber_policy_error_renders_dedicated_notice() {
             thread_id: "thread-1".to_string(),
             turn: AppServerTurn {
                 id: "turn-1".to_string(),
+                is_forkable: true,
                 items_view: codex_app_server_protocol::TurnItemsView::Full,
                 items: Vec::new(),
                 status: AppServerTurnStatus::InProgress,
