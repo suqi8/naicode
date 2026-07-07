@@ -275,6 +275,7 @@ impl<'a> ToolRuntime<UnifiedExecRequest, UnifiedExecProcess> for UnifiedExecRunt
         Some(NetworkApprovalSpec {
             network: Some(network.clone()),
             mode: NetworkApprovalMode::Deferred,
+            execution_scoped_proxy: req.turn_environment.environment.is_remote(),
             trigger: GuardianNetworkAccessTrigger {
                 call_id: ctx.call_id.clone(),
                 tool_name: flat_tool_name(&ctx.tool_name).into_owned(),
@@ -331,10 +332,11 @@ impl<'a> ToolRuntime<UnifiedExecRequest, UnifiedExecProcess> for UnifiedExecRunt
                         "failed to read effective network proxy config: {err}"
                     ))))
                 })?;
-                let proxy_config = RemoteNetworkProxyConfig::from_effective_config(&config)
+                let mut proxy_config = RemoteNetworkProxyConfig::from_effective_config(&config)
                     .map_err(|err| {
                         ToolError::Codex(CodexErr::Io(io::Error::other(err.to_string())))
                     })?;
+                proxy_config.request_policy_decisions = network.has_policy_decider();
                 let allow_local_binding = proxy_config.allow_local_binding;
                 (
                     env,
