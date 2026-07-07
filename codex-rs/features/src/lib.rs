@@ -547,6 +547,11 @@ impl Features {
     }
 
     pub fn normalize_dependencies(&mut self) {
+        if !self.enabled(Feature::Sqlite) {
+            // Keep every feature that cannot operate without SQLite in this block.
+            self.disable(Feature::Goals);
+            self.disable(Feature::SpawnCsv);
+        }
         if self.enabled(Feature::SpawnCsv) && !self.enabled(Feature::Collab) {
             self.enable(Feature::Collab);
         }
@@ -917,7 +922,7 @@ pub const FEATURES: &[FeatureSpec] = &[
     FeatureSpec {
         id: Feature::Sqlite,
         key: "sqlite",
-        stage: Stage::Removed,
+        stage: Stage::Stable,
         default_enabled: true,
     },
     FeatureSpec {
