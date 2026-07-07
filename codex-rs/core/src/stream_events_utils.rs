@@ -129,13 +129,19 @@ async fn save_image_generation_result(
 
 pub(crate) async fn persist_image_generation_item(
     sess: &Session,
-    turn_context: &TurnContext,
     image_item: &mut ImageGenerationItem,
 ) -> Option<AbsolutePathBuf> {
     image_item.saved_path = None;
+    let Some(local_runtime_paths) = sess.local_runtime_paths().await else {
+        tracing::debug!(
+            call_id = %image_item.id,
+            "generated image persistence is unavailable without local runtime paths"
+        );
+        return None;
+    };
     let session_id = sess.thread_id.to_string();
     match save_image_generation_result(
-        &turn_context.config.codex_home,
+        &local_runtime_paths.codex_home,
         &session_id,
         &image_item.id,
         &image_item.result,
@@ -148,13 +154,13 @@ pub(crate) async fn persist_image_generation_item(
         }
         Err(err) => {
             let output_path = image_generation_artifact_path(
-                &turn_context.config.codex_home,
+                &local_runtime_paths.codex_home,
                 &session_id,
                 &image_item.id,
             );
             let output_dir = output_path
                 .parent()
-                .unwrap_or_else(|| turn_context.config.codex_home.clone());
+                .unwrap_or_else(|| local_runtime_paths.codex_home.clone());
             tracing::warn!(
                 call_id = %image_item.id,
                 output_dir = %output_dir.display(),
@@ -173,12 +179,15 @@ async fn record_image_generation_instructions(
     if image_item.saved_path.is_none() {
         return;
     }
+    let Some(local_runtime_paths) = sess.local_runtime_paths().await else {
+        return;
+    };
     let session_id = sess.thread_id.to_string();
     let image_output_path =
-        image_generation_artifact_path(&turn_context.config.codex_home, &session_id, "<image_id>");
+        image_generation_artifact_path(&local_runtime_paths.codex_home, &session_id, "<image_id>");
     let image_output_dir = image_output_path
         .parent()
-        .unwrap_or_else(|| turn_context.config.codex_home.clone());
+        .unwrap_or_else(|| local_runtime_paths.codex_home.clone());
     let message: ResponseItem = ContextualUserFragment::into(ImageGenerationInstructions::new(
         image_output_dir.display(),
         image_output_path.display(),
@@ -529,14 +538,7 @@ pub(crate) async fn handle_non_tool_response_item(
         | ResponseItem::WebSearchCall { .. }
         | ResponseItem::ImageGenerationCall { .. } => {
             let mut turn_item = parse_turn_item(item)?;
-            finalize_turn_item(
-                sess,
-                turn_context,
-                contributor_policy,
-                &mut turn_item,
-                plan_mode,
-            )
-            .await;
+            finalize_turn_item(sess, contributor_policy, &mut turn_item, plan_mode).await;
             if let TurnItem::ImageGeneration(image_item) = &turn_item {
                 record_image_generation_instructions(sess, turn_context, image_item).await;
             }
@@ -554,7 +556,6 @@ pub(crate) async fn handle_non_tool_response_item(
 
 pub(crate) async fn finalize_turn_item(
     sess: &Session,
-    turn_context: &TurnContext,
     contributor_policy: TurnItemContributorPolicy<'_>,
     turn_item: &mut TurnItem,
     plan_mode: bool,
@@ -581,7 +582,7 @@ pub(crate) async fn finalize_turn_item(
     if let TurnItem::ImageGeneration(image_item) = &mut *turn_item
         && !image_item.result.is_empty()
     {
-        persist_image_generation_item(sess, turn_context, image_item).await;
+        persist_image_generation_item(sess, image_item).await;
     }
 }
 

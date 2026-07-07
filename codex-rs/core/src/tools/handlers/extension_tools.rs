@@ -108,7 +108,6 @@ impl TurnItemEmitter for CoreTurnItemEmitter {
                     let mut item = TurnItem::WebSearch(item);
                     finalize_turn_item(
                         session.as_ref(),
-                        turn.as_ref(),
                         TurnItemContributorPolicy::Run(turn.extension_data.as_ref()),
                         &mut item,
                         turn.collaboration_mode.mode
