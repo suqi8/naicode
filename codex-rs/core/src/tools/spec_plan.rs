@@ -90,6 +90,7 @@ use codex_tools::request_user_input_available_modes;
 use codex_tools::shell_command_backend_for_features;
 use codex_tools::shell_type_for_model_and_features;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::instrument;
@@ -195,11 +196,28 @@ fn build_tool_specs_and_registry(
         wait_agent_timeouts: wait_agent_timeout_options(turn_context),
     };
     let mut planned_tools = PlannedTools::default();
-    add_tool_sources(&context, &mut planned_tools);
-    apply_direct_model_only_namespace_overrides(turn_context, &mut planned_tools);
-    append_tool_search_executor(&context, &mut planned_tools);
-    prepend_code_mode_executors(&context, &mut planned_tools);
+    if server_registered_tools_only(turn_context) {
+        add_mcp_runtime_tools(
+            &context,
+            &mut planned_tools,
+            Some(&turn_context.config.server_registered_mcp_tools),
+        );
+        add_dynamic_tools(&context, &mut planned_tools);
+    } else {
+        add_tool_sources(&context, &mut planned_tools);
+        apply_direct_model_only_namespace_overrides(turn_context, &mut planned_tools);
+        append_tool_search_executor(&context, &mut planned_tools);
+        prepend_code_mode_executors(&context, &mut planned_tools);
+    }
     build_model_visible_specs_and_registry(turn_context, planned_tools)
+}
+
+fn server_registered_tools_only(turn_context: &TurnContext) -> bool {
+    turn_context
+        .config
+        .features
+        .get()
+        .enabled(Feature::ServerRegisteredToolsOnly)
 }
 
 fn apply_direct_model_only_namespace_overrides(
@@ -248,15 +266,16 @@ fn build_model_visible_specs_and_registry(
             continue;
         }
         let exposure = runtime.exposure();
-        if exposure.is_direct() && !is_hidden_by_code_mode_only(turn_context, &tool_name, exposure)
+        if exposure.is_direct()
+            && (server_registered_tools_only(turn_context)
+                || !is_hidden_by_code_mode_only(turn_context, &tool_name, exposure))
         {
             let spec = runtime.spec();
-            specs.push(spec_for_model_request(
-                turn_context,
-                exposure,
-                &tool_name,
-                spec,
-            ));
+            specs.push(if server_registered_tools_only(turn_context) {
+                spec
+            } else {
+                spec_for_model_request(turn_context, exposure, &tool_name, spec)
+            });
         }
     }
     specs.extend(hosted_specs);
@@ -329,7 +348,9 @@ fn hosted_model_tool_specs(context: &CoreToolPlanContext<'_>) -> Vec<ToolSpec> {
 }
 
 pub(crate) fn search_tool_enabled(turn_context: &TurnContext) -> bool {
-    turn_context.model_info.supports_search_tool && namespace_tools_enabled(turn_context)
+    !server_registered_tools_only(turn_context)
+        && turn_context.model_info.supports_search_tool
+        && namespace_tools_enabled(turn_context)
 }
 
 pub(crate) fn tool_suggest_enabled(turn_context: &TurnContext) -> bool {
@@ -615,7 +636,7 @@ fn add_tool_sources(context: &CoreToolPlanContext<'_>, planned_tools: &mut Plann
     add_mcp_resource_tools(context, planned_tools);
     add_core_utility_tools(context, planned_tools);
     add_collaboration_tools(context, planned_tools);
-    add_mcp_runtime_tools(context, planned_tools);
+    add_mcp_runtime_tools(context, planned_tools, /*allowed_raw_tools*/ None);
     add_extension_tools(context, planned_tools);
     add_dynamic_tools(context, planned_tools);
     for spec in hosted_model_tool_specs(context) {
@@ -882,9 +903,16 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mu
         deferred_mcp_tool_count = context.deferred_mcp_tools.map_or(0, <[ToolInfo]>::len)
     )
 )]
-fn add_mcp_runtime_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut PlannedTools) {
+fn add_mcp_runtime_tools(
+    context: &CoreToolPlanContext<'_>,
+    planned_tools: &mut PlannedTools,
+    allowed_raw_tools: Option<&BTreeMap<String, BTreeSet<String>>>,
+) {
     if let Some(mcp_tools) = context.mcp_tools {
-        for tool in mcp_tools {
+        for tool in mcp_tools
+            .iter()
+            .filter(|tool| raw_mcp_tool_is_allowed(tool, allowed_raw_tools))
+        {
             match McpHandler::new(tool.clone()) {
                 Ok(handler) => planned_tools.add(handler),
                 Err(err) => warn!(
@@ -896,7 +924,10 @@ fn add_mcp_runtime_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut 
     }
 
     if let Some(deferred_mcp_tools) = context.deferred_mcp_tools {
-        for tool in deferred_mcp_tools {
+        for tool in deferred_mcp_tools
+            .iter()
+            .filter(|tool| raw_mcp_tool_is_allowed(tool, allowed_raw_tools))
+        {
             match McpHandler::new(tool.clone()) {
                 Ok(handler) => planned_tools.add_with_exposure(handler, ToolExposure::Deferred),
                 Err(err) => warn!(
@@ -906,6 +937,17 @@ fn add_mcp_runtime_tools(context: &CoreToolPlanContext<'_>, planned_tools: &mut 
             }
         }
     }
+}
+
+fn raw_mcp_tool_is_allowed(
+    tool: &ToolInfo,
+    allowed_raw_tools: Option<&BTreeMap<String, BTreeSet<String>>>,
+) -> bool {
+    allowed_raw_tools.is_none_or(|allowed_raw_tools| {
+        allowed_raw_tools
+            .get(&tool.server_name)
+            .is_some_and(|allowed_tools| allowed_tools.contains(tool.tool.name.as_ref()))
+    })
 }
 
 #[instrument(
