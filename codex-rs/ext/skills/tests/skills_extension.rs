@@ -33,6 +33,7 @@ use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::user_input::UserInput;
 use codex_skills_extension::SkillProviders;
 use codex_skills_extension::SkillsExtensionConfig;
+use codex_skills_extension::SkillsThreadState;
 use codex_skills_extension::catalog::SkillAuthority;
 use codex_skills_extension::catalog::SkillCatalog;
 use codex_skills_extension::catalog::SkillCatalogEntry;
@@ -331,6 +332,116 @@ async fn selected_executor_catalog_follows_step_availability_and_reuses_its_cach
             ))
             .is_none()
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn executor_catalog_inspection_does_not_cache_failed_discovery() -> TestResult {
+    let list_calls = Arc::new(AtomicUsize::new(0));
+    let expected_catalog = SkillCatalog {
+        entries: vec![test_entry(
+            SkillSourceKind::Executor,
+            "env-1",
+            "executor/lint-fix",
+            "lint-fix/SKILL.md",
+        )],
+        warnings: Vec::new(),
+    };
+    let providers = SkillProviders::new().with_executor_provider(Arc::new(StaticSkillProvider {
+        catalog: expected_catalog.clone(),
+        read_requests: Arc::new(Mutex::new(Vec::new())),
+        list_calls: Some(Arc::clone(&list_calls)),
+        fail_first_list: true,
+    }));
+    let mut builder = ExtensionRegistryBuilder::new();
+    install_with_providers(&mut builder, providers.clone(), skills_extension_config);
+    let registry = builder.build();
+    let session_store = ExtensionData::new("session");
+    let thread_store = ExtensionData::new("thread");
+    let session_source = SessionSource::Cli;
+    let config = default_config();
+    registry.thread_lifecycle_contributors()[0]
+        .on_thread_start(ThreadStartInput {
+            config: &config,
+            session_source: &session_source,
+            persistent_thread_state_available: true,
+            environments: &[],
+            session_store: &session_store,
+            thread_store: &thread_store,
+        })
+        .await;
+
+    let selected_roots = vec![SelectedCapabilityRoot {
+        id: "lint-fix".to_string(),
+        location: CapabilityRootLocation::Environment {
+            environment_id: "env-1".to_string(),
+            path: PathUri::parse("file:///skills/lint-fix").expect("skill root URI"),
+        },
+    }];
+    let state = thread_store
+        .get::<SkillsThreadState>()
+        .ok_or("skills thread state should be initialized")?;
+    let observed = state
+        .inspect_executor_catalog(
+            &providers,
+            SkillListQuery {
+                turn_id: "inspection".to_string(),
+                executor_roots: selected_roots.clone(),
+                host_snapshot: None,
+                include_host_skills: false,
+                include_bundled_skills: false,
+                include_orchestrator_skills: false,
+                mcp_resources: None,
+            },
+        )
+        .await;
+    assert_eq!(
+        SkillCatalog {
+            entries: Vec::new(),
+            warnings: vec![
+                "executor skills unavailable: temporary orchestrator failure".to_string()
+            ],
+        },
+        observed
+    );
+    assert_eq!(1, list_calls.load(Ordering::Relaxed));
+
+    let turn_store = ExtensionData::new("turn-1");
+    let sections = registry.context_contributors()[0]
+        .contribute_world_state(WorldStateContributionInput {
+            thread_id: codex_protocol::ThreadId::new(),
+            turn_id: "turn-1",
+            environments: &[],
+            ready_selected_capability_roots: &selected_roots,
+            session_store: &session_store,
+            thread_store: &thread_store,
+            turn_store: &turn_store,
+        })
+        .await;
+    assert_eq!(1, sections.len());
+    let fragment = sections[0]
+        .render_diff(PreviousWorldStateSection::Absent)
+        .ok_or("recovered executor skill should render")?;
+    assert!(fragment.body().contains("lint-fix"));
+    assert_eq!(2, list_calls.load(Ordering::Relaxed));
+
+    let cached = state
+        .executor_catalog_snapshot(
+            &providers,
+            SkillListQuery {
+                turn_id: "turn-2".to_string(),
+                executor_roots: selected_roots,
+                host_snapshot: None,
+                include_host_skills: false,
+                include_bundled_skills: false,
+                include_orchestrator_skills: false,
+                mcp_resources: None,
+            },
+        )
+        .await;
+    assert_eq!(expected_catalog, cached);
+    assert_eq!(2, list_calls.load(Ordering::Relaxed));
 
     Ok(())
 }

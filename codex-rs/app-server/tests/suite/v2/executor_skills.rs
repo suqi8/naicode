@@ -7,6 +7,9 @@ use codex_app_server_protocol::CapabilityRootLocation;
 use codex_app_server_protocol::JSONRPCResponse;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::SelectedCapabilityRoot;
+use codex_app_server_protocol::SkillsListParams;
+use codex_app_server_protocol::SkillsListResponse;
+use codex_app_server_protocol::ThreadSkillMetadata;
 use codex_app_server_protocol::ThreadStartParams;
 use codex_app_server_protocol::ThreadStartResponse;
 use codex_app_server_protocol::TurnStartParams;
@@ -22,7 +25,7 @@ const SKILL_MARKER: &str = "EXECUTOR_SKILL_BODY_MARKER";
 const LOCAL_SKILL_MARKER: &str = "LOCAL_SKILL_BODY_MARKER";
 
 #[tokio::test]
-async fn selected_executor_root_exposes_plugin_skill() -> Result<()> {
+async fn selected_executor_root_lists_and_exposes_plugin_skill() -> Result<()> {
     let server = responses::start_mock_server().await;
     let response_mock = responses::mount_sse_once(
         &server,
@@ -107,6 +110,40 @@ stream_max_retries = 0
     )
     .await??;
     let ThreadStartResponse { thread, .. } = to_response(response)?;
+
+    let request_id = app_server
+        .send_skills_list_request(SkillsListParams {
+            cwds: Vec::new(),
+            force_reload: false,
+            thread_id: Some(thread.id.clone()),
+        })
+        .await?;
+    let response: JSONRPCResponse = timeout(
+        READ_TIMEOUT,
+        app_server.read_stream_until_response_message(RequestId::Integer(request_id)),
+    )
+    .await??;
+    let SkillsListResponse {
+        thread_skills,
+        thread_skill_warnings,
+        ..
+    } = to_response(response)?;
+    let skill_path = PathUri::from_host_native_path(skill_dir.join("SKILL.md"))?;
+    let normalized_path = skill_path.inferred_native_path_string().replace('\\', "/");
+    assert_eq!(
+        vec![ThreadSkillMetadata {
+            name: SKILL_NAME.to_string(),
+            description: "Deploy through the executor.".to_string(),
+            short_description: None,
+            resource: format!(
+                "skill://demo-plugin@1/{}",
+                normalized_path.trim_start_matches('/')
+            ),
+            enabled: true,
+        }],
+        thread_skills
+    );
+    assert_eq!(Vec::<String>::new(), thread_skill_warnings);
 
     let request_id = app_server
         .send_turn_start_request(TurnStartParams {
