@@ -4,6 +4,8 @@ use crate::attribution::PROXY_ATTRIBUTION_TOKEN_ENV_KEY;
 use crate::config;
 use crate::credential_broker::BROKERED_CREDENTIALS_ENV_KEY;
 use crate::credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
+use crate::dns;
+use crate::dns::DNS_PROXY_ENV_KEY;
 use crate::http_proxy;
 use crate::network_policy::NetworkPolicyDecider;
 use crate::runtime::BlockedRequestObserver;
@@ -36,13 +38,19 @@ pub struct Args {}
 struct ReservedListeners {
     http: Mutex<Option<StdTcpListener>>,
     socks: Mutex<Option<StdTcpListener>>,
+    dns: Mutex<Option<StdTcpListener>>,
 }
 
 impl ReservedListeners {
-    fn new(http: StdTcpListener, socks: Option<StdTcpListener>) -> Self {
+    fn new(
+        http: StdTcpListener,
+        socks: Option<StdTcpListener>,
+        dns: Option<StdTcpListener>,
+    ) -> Self {
         Self {
             http: Mutex::new(Some(http)),
             socks: Mutex::new(socks),
+            dns: Mutex::new(dns),
         }
     }
 
@@ -61,18 +69,32 @@ impl ReservedListeners {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         guard.take()
     }
+
+    fn take_dns(&self) -> Option<StdTcpListener> {
+        let mut guard = self
+            .dns
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        guard.take()
+    }
 }
 
 struct ReservedListenerSet {
     http_listener: StdTcpListener,
     socks_listener: Option<StdTcpListener>,
+    dns_listener: Option<StdTcpListener>,
 }
 
 impl ReservedListenerSet {
-    fn new(http_listener: StdTcpListener, socks_listener: Option<StdTcpListener>) -> Self {
+    fn new(
+        http_listener: StdTcpListener,
+        socks_listener: Option<StdTcpListener>,
+        dns_listener: Option<StdTcpListener>,
+    ) -> Self {
         Self {
             http_listener,
             socks_listener,
+            dns_listener,
         }
     }
 
@@ -92,10 +114,19 @@ impl ReservedListenerSet {
             })
     }
 
+    fn dns_addr(&self) -> Result<Option<SocketAddr>> {
+        self.dns_listener
+            .as_ref()
+            .map(StdTcpListener::local_addr)
+            .transpose()
+            .context("failed to read reserved DNS proxy address")
+    }
+
     fn into_reserved_listeners(self) -> Arc<ReservedListeners> {
         Arc::new(ReservedListeners::new(
             self.http_listener,
             self.socks_listener,
+            self.dns_listener,
         ))
     }
 }
@@ -183,41 +214,46 @@ impl NetworkProxyBuilder {
             .set_blocked_request_observer(self.blocked_request_observer.clone())
             .await;
         let current_cfg = state.current_cfg().await?;
-        let (requested_http_addr, requested_socks_addr, reserved_listeners) = if self
-            .managed_by_codex
-        {
-            let runtime = config::resolve_runtime(&current_cfg)?;
-            #[cfg(target_os = "windows")]
-            let (managed_http_addr, managed_socks_addr) = config::clamp_bind_addrs(
-                runtime.http_addr,
-                runtime.socks_addr,
-                &current_cfg.network,
-            );
-            #[cfg(target_os = "windows")]
-            let reserved = reserve_windows_managed_listeners(
-                managed_http_addr,
-                managed_socks_addr,
-                current_cfg.network.enable_socks5,
-            )
-            .context("reserve managed loopback proxy listeners")?;
-            #[cfg(not(target_os = "windows"))]
-            let reserved = reserve_loopback_ephemeral_listeners(current_cfg.network.enable_socks5)
+        let (requested_http_addr, requested_socks_addr, dns_addr, reserved_listeners) =
+            if self.managed_by_codex {
+                let runtime = config::resolve_runtime(&current_cfg)?;
+                #[cfg(target_os = "windows")]
+                let (managed_http_addr, managed_socks_addr) = config::clamp_bind_addrs(
+                    runtime.http_addr,
+                    runtime.socks_addr,
+                    &current_cfg.network,
+                );
+                #[cfg(target_os = "windows")]
+                let reserved = reserve_windows_managed_listeners(
+                    managed_http_addr,
+                    managed_socks_addr,
+                    current_cfg.network.enable_socks5,
+                )
                 .context("reserve managed loopback proxy listeners")?;
-            let http_addr = reserved.http_addr()?;
-            let socks_addr = reserved.socks_addr(runtime.socks_addr)?;
-            (
-                http_addr,
-                socks_addr,
-                Some(reserved.into_reserved_listeners()),
-            )
-        } else {
-            let runtime = config::resolve_runtime(&current_cfg)?;
-            (
-                self.http_addr.unwrap_or(runtime.http_addr),
-                self.socks_addr.unwrap_or(runtime.socks_addr),
-                None,
-            )
-        };
+                #[cfg(not(target_os = "windows"))]
+                let reserved = reserve_loopback_ephemeral_listeners(
+                    current_cfg.network.enable_socks5,
+                    /*reserve_dns_listener*/ true,
+                )
+                .context("reserve managed loopback proxy listeners")?;
+                let http_addr = reserved.http_addr()?;
+                let socks_addr = reserved.socks_addr(runtime.socks_addr)?;
+                let dns_addr = reserved.dns_addr()?;
+                (
+                    http_addr,
+                    socks_addr,
+                    dns_addr,
+                    Some(reserved.into_reserved_listeners()),
+                )
+            } else {
+                let runtime = config::resolve_runtime(&current_cfg)?;
+                (
+                    self.http_addr.unwrap_or(runtime.http_addr),
+                    self.socks_addr.unwrap_or(runtime.socks_addr),
+                    None,
+                    None,
+                )
+            };
 
         // Reapply bind clamping for caller overrides so unix-socket proxying stays loopback-only.
         let (http_addr, socks_addr) = config::clamp_bind_addrs(
@@ -230,6 +266,7 @@ impl NetworkProxyBuilder {
             state,
             http_addr,
             socks_addr,
+            dns_addr,
             socks_enabled: current_cfg.network.enable_socks5,
             socks5_udp_enabled: current_cfg.network.enable_socks5_udp,
             runtime_settings: Arc::new(RwLock::new(NetworkProxyRuntimeSettings::from_config(
@@ -245,6 +282,7 @@ impl NetworkProxyBuilder {
 
 fn reserve_loopback_ephemeral_listeners(
     reserve_socks_listener: bool,
+    reserve_dns_listener: bool,
 ) -> Result<ReservedListenerSet> {
     let http_listener =
         reserve_loopback_ephemeral_listener().context("reserve HTTP proxy listener")?;
@@ -253,7 +291,16 @@ fn reserve_loopback_ephemeral_listeners(
     } else {
         None
     };
-    Ok(ReservedListenerSet::new(http_listener, socks_listener))
+    let dns_listener = if reserve_dns_listener {
+        Some(reserve_loopback_ephemeral_listener().context("reserve DNS proxy listener")?)
+    } else {
+        None
+    };
+    Ok(ReservedListenerSet::new(
+        http_listener,
+        socks_listener,
+        dns_listener,
+    ))
 }
 
 #[cfg(target_os = "windows")]
@@ -269,8 +316,11 @@ fn reserve_windows_managed_listeners(
         Ok(listeners) => Ok(listeners),
         Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
             warn!("managed Windows proxy ports are busy; falling back to ephemeral loopback ports");
-            reserve_loopback_ephemeral_listeners(reserve_socks_listener)
-                .context("reserve fallback loopback proxy listeners")
+            reserve_loopback_ephemeral_listeners(
+                reserve_socks_listener,
+                /*reserve_dns_listener*/ true,
+            )
+            .context("reserve fallback loopback proxy listeners")
         }
         Err(err) => Err(err).context("reserve Windows managed proxy listeners"),
     }
@@ -288,7 +338,12 @@ fn try_reserve_windows_managed_listeners(
     } else {
         None
     };
-    Ok(ReservedListenerSet::new(http_listener, socks_listener))
+    let dns_listener = Some(StdTcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?);
+    Ok(ReservedListenerSet::new(
+        http_listener,
+        socks_listener,
+        dns_listener,
+    ))
 }
 
 #[cfg(target_os = "windows")]
@@ -336,6 +391,7 @@ impl NetworkProxyRuntimeSettings {
 struct EnvironmentProxyAddrs {
     http_addr: SocketAddr,
     socks_addr: SocketAddr,
+    dns_addr: Option<SocketAddr>,
 }
 
 /// Portable managed-network facts needed by an operating-system sandbox.
@@ -363,6 +419,7 @@ struct EnvironmentProxy {
     addrs: EnvironmentProxyAddrs,
     http_task: JoinHandle<Result<()>>,
     socks_task: Option<JoinHandle<Result<()>>>,
+    dns_task: Option<JoinHandle<Result<()>>>,
 }
 
 #[derive(Clone)]
@@ -370,6 +427,7 @@ pub struct NetworkProxy {
     state: Arc<NetworkProxyState>,
     http_addr: SocketAddr,
     socks_addr: SocketAddr,
+    dns_addr: Option<SocketAddr>,
     socks_enabled: bool,
     socks5_udp_enabled: bool,
     runtime_settings: Arc<RwLock<NetworkProxyRuntimeSettings>>,
@@ -386,6 +444,7 @@ impl std::fmt::Debug for NetworkProxy {
         f.debug_struct("NetworkProxy")
             .field("http_addr", &self.http_addr)
             .field("socks_addr", &self.socks_addr)
+            .field("dns_addr", &self.dns_addr)
             .finish_non_exhaustive()
     }
 }
@@ -394,6 +453,7 @@ impl PartialEq for NetworkProxy {
     fn eq(&self, other: &Self) -> bool {
         self.http_addr == other.http_addr
             && self.socks_addr == other.socks_addr
+            && self.dns_addr == other.dns_addr
             && self.runtime_settings() == other.runtime_settings()
     }
 }
@@ -432,6 +492,7 @@ pub const PROXY_ENV_KEYS: &[&str] = &[
     BROKERED_CREDENTIALS_ENV_KEY,
     ALLOW_LOCAL_BINDING_ENV_KEY,
     PROXY_ATTRIBUTION_TOKEN_ENV_KEY,
+    DNS_PROXY_ENV_KEY,
     ELECTRON_GET_USE_PROXY_ENV_KEY,
     NODE_USE_ENV_PROXY_ENV_KEY,
     "HTTP_PROXY",
@@ -705,6 +766,11 @@ impl NetworkProxy {
             runtime_settings.mitm_ca_trust_bundle.as_ref(),
         );
         self.state.virtualize_child_credentials(&mut env);
+        env.remove(PROXY_ATTRIBUTION_TOKEN_ENV_KEY);
+        env.remove(DNS_PROXY_ENV_KEY);
+        if let Some(dns_addr) = addrs.dns_addr {
+            env.insert(DNS_PROXY_ENV_KEY.to_string(), format!("tcp://{dns_addr}"));
+        }
         if let Some(execution_scope) = self.execution_scope.as_ref() {
             env.insert(
                 PROXY_ATTRIBUTION_TOKEN_ENV_KEY.to_string(),
@@ -746,6 +812,7 @@ impl NetworkProxy {
             EnvironmentProxyAddrs {
                 http_addr: self.http_addr,
                 socks_addr: self.socks_addr,
+                dns_addr: self.dns_addr,
             },
         );
     }
@@ -786,6 +853,7 @@ impl NetworkProxy {
             None => EnvironmentProxyAddrs {
                 http_addr: self.http_addr,
                 socks_addr: self.socks_addr,
+                dns_addr: self.dns_addr,
             },
         };
         Ok(self.prepare_for_addrs(env, addrs))
@@ -812,22 +880,28 @@ impl NetworkProxy {
             format!("failed to create network proxy for environment `{environment_id}`")
         })?;
         let listeners =
-            reserve_loopback_ephemeral_listeners(self.socks_enabled).with_context(|| {
-                format!("failed to reserve network proxy for environment `{environment_id}`")
-            })?;
+            reserve_loopback_ephemeral_listeners(self.socks_enabled, self.dns_addr.is_some())
+                .with_context(|| {
+                    format!("failed to reserve network proxy for environment `{environment_id}`")
+                })?;
         let http_addr = listeners.http_addr().with_context(|| {
             format!("failed to read HTTP proxy address for environment `{environment_id}`")
         })?;
         let socks_addr = listeners.socks_addr(self.socks_addr).with_context(|| {
             format!("failed to read SOCKS proxy address for environment `{environment_id}`")
         })?;
+        let dns_addr = listeners.dns_addr().with_context(|| {
+            format!("failed to read DNS proxy address for environment `{environment_id}`")
+        })?;
         let addrs = EnvironmentProxyAddrs {
             http_addr,
             socks_addr,
+            dns_addr,
         };
         let ReservedListenerSet {
             http_listener,
             socks_listener,
+            dns_listener,
         } = listeners;
 
         let environment_id = environment_id.to_string();
@@ -865,12 +939,21 @@ impl NetworkProxy {
             None
         };
 
+        let dns_task = dns_listener.map(|listener| {
+            let dns_state = self.state.clone();
+            let dns_environment_id = Some(environment_id.clone());
+            runtime.spawn(async move {
+                dns::run_dns_proxy_with_std_listener(dns_state, listener, dns_environment_id).await
+            })
+        });
+
         proxies.insert(
             environment_id,
             EnvironmentProxy {
                 addrs,
                 http_task,
                 socks_task,
+                dns_task,
             },
         );
         Ok(addrs)
@@ -936,6 +1019,7 @@ impl NetworkProxy {
         let reserved_listeners = self.reserved_listeners.as_ref();
         let http_listener = reserved_listeners.and_then(|listeners| listeners.take_http());
         let socks_listener = reserved_listeners.and_then(|listeners| listeners.take_socks());
+        let dns_listener = reserved_listeners.and_then(|listeners| listeners.take_dns());
 
         let http_state = self.state.clone();
         let http_decider = self.policy_decider.clone();
@@ -996,9 +1080,20 @@ impl NetworkProxy {
             None
         };
 
+        let dns_task = dns_listener.map(|listener| {
+            let dns_state = self.state.clone();
+            tokio::spawn(async move {
+                dns::run_dns_proxy_with_std_listener(
+                    dns_state, listener, /*environment_id*/ None,
+                )
+                .await
+            })
+        });
+
         Ok(NetworkProxyHandle {
             http_task: Some(http_task),
             socks_task,
+            dns_task,
             environment_proxies: self.environment_proxies.clone(),
             completed: false,
         })
@@ -1008,6 +1103,7 @@ impl NetworkProxy {
 pub struct NetworkProxyHandle {
     http_task: Option<JoinHandle<Result<()>>>,
     socks_task: Option<JoinHandle<Result<()>>>,
+    dns_task: Option<JoinHandle<Result<()>>>,
     environment_proxies: Arc<Mutex<HashMap<String, EnvironmentProxy>>>,
     completed: bool,
 }
@@ -1017,6 +1113,7 @@ impl NetworkProxyHandle {
         Self {
             http_task: Some(tokio::spawn(async { Ok(()) })),
             socks_task: None,
+            dns_task: None,
             environment_proxies: Arc::new(Mutex::new(HashMap::new())),
             completed: true,
         }
@@ -1025,8 +1122,13 @@ impl NetworkProxyHandle {
     pub async fn wait(mut self) -> Result<()> {
         let http_task = self.http_task.take().context("missing http proxy task")?;
         let socks_task = self.socks_task.take();
+        let dns_task = self.dns_task.take();
         let http_result = http_task.await;
         let socks_result = match socks_task {
+            Some(task) => Some(task.await),
+            None => None,
+        };
+        let dns_result = match dns_task {
             Some(task) => Some(task.await),
             None => None,
         };
@@ -1036,11 +1138,19 @@ impl NetworkProxyHandle {
         if let Some(socks_result) = socks_result {
             socks_result??;
         }
+        if let Some(dns_result) = dns_result {
+            dns_result??;
+        }
         Ok(())
     }
 
     pub async fn shutdown(mut self) -> Result<()> {
-        abort_tasks(self.http_task.take(), self.socks_task.take()).await;
+        abort_tasks(
+            self.http_task.take(),
+            self.socks_task.take(),
+            self.dns_task.take(),
+        )
+        .await;
         abort_environment_proxies(self.environment_proxies.clone()).await;
         self.completed = true;
         Ok(())
@@ -1057,9 +1167,11 @@ async fn abort_task(task: Option<JoinHandle<Result<()>>>) {
 async fn abort_tasks(
     http_task: Option<JoinHandle<Result<()>>>,
     socks_task: Option<JoinHandle<Result<()>>>,
+    dns_task: Option<JoinHandle<Result<()>>>,
 ) {
     abort_task(http_task).await;
     abort_task(socks_task).await;
+    abort_task(dns_task).await;
 }
 
 async fn abort_environment_proxies(
@@ -1074,6 +1186,7 @@ async fn abort_environment_proxies(
     for proxy in proxies {
         abort_task(Some(proxy.http_task)).await;
         abort_task(proxy.socks_task).await;
+        abort_task(proxy.dns_task).await;
     }
 }
 
@@ -1084,9 +1197,10 @@ impl Drop for NetworkProxyHandle {
         }
         let http_task = self.http_task.take();
         let socks_task = self.socks_task.take();
+        let dns_task = self.dns_task.take();
         let environment_proxies = self.environment_proxies.clone();
         tokio::spawn(async move {
-            abort_tasks(http_task, socks_task).await;
+            abort_tasks(http_task, socks_task, dns_task).await;
             abort_environment_proxies(environment_proxies).await;
         });
     }
@@ -1131,6 +1245,9 @@ mod tests {
 
         assert!(proxy.http_addr.ip().is_loopback());
         assert!(proxy.socks_addr.ip().is_loopback());
+        let dns_addr = proxy.dns_addr.expect("managed DNS proxy address");
+        assert!(dns_addr.ip().is_loopback());
+        assert_ne!(dns_addr.port(), 0);
         #[cfg(target_os = "windows")]
         {
             assert_eq!(proxy.http_addr, http_addr);
@@ -1166,25 +1283,63 @@ mod tests {
             proxy.socks_addr,
             "127.0.0.1:48081".parse::<SocketAddr>().unwrap()
         );
+        assert_eq!(proxy.dns_addr, None);
     }
 
     #[tokio::test]
     async fn prepare_for_environment_keeps_env_and_sandbox_ports_in_sync() -> Result<()> {
-        let state = Arc::new(network_proxy_state_for_policy(
-            NetworkProxySettings::default(),
-        ));
+        let state = Arc::new(network_proxy_state_for_policy(NetworkProxySettings {
+            enabled: true,
+            ..NetworkProxySettings::default()
+        }));
         let proxy = NetworkProxy::builder().state(state).build().await?;
         let handle = proxy.run().await?;
 
-        let base_env = HashMap::from([("PRESERVED".to_string(), "value".to_string())]);
+        let base_env = HashMap::from([
+            ("PRESERVED".to_string(), "value".to_string()),
+            (
+                DNS_PROXY_ENV_KEY.to_string(),
+                "tcp://127.0.0.1:9".to_string(),
+            ),
+            (
+                PROXY_ATTRIBUTION_TOKEN_ENV_KEY.to_string(),
+                "stale-token".to_string(),
+            ),
+        ]);
+        let global = proxy.prepare_for_optional_environment(HashMap::new(), None)?;
         let local = proxy.prepare_for_optional_environment(base_env.clone(), Some("local"))?;
         let remote = proxy.prepare_for_optional_environment(HashMap::new(), Some("remote"))?;
+        let local_addrs = proxy.environment_proxy_addrs("local")?;
+        let remote_addrs = proxy.environment_proxy_addrs("remote")?;
+        let global_dns_addr = global
+            .env
+            .get(DNS_PROXY_ENV_KEY)
+            .and_then(|value| value.strip_prefix("tcp://"))
+            .and_then(|value| value.parse::<SocketAddr>().ok())
+            .expect("global DNS proxy address");
+        let local_dns_addr = local
+            .env
+            .get(DNS_PROXY_ENV_KEY)
+            .and_then(|value| value.strip_prefix("tcp://"))
+            .and_then(|value| value.parse::<SocketAddr>().ok())
+            .expect("environment DNS proxy address");
+        let remote_dns_addr = remote
+            .env
+            .get(DNS_PROXY_ENV_KEY)
+            .and_then(|value| value.strip_prefix("tcp://"))
+            .and_then(|value| value.parse::<SocketAddr>().ok())
+            .expect("environment DNS proxy address");
 
         assert_eq!(
             local.env.get("PRESERVED").map(String::as_str),
             Some("value")
         );
+        assert_eq!(local.env.get(PROXY_ATTRIBUTION_TOKEN_ENV_KEY), None);
         assert_ne!(local.env.get("HTTP_PROXY"), remote.env.get("HTTP_PROXY"));
+        assert_eq!(Some(global_dns_addr), proxy.dns_addr);
+        assert_eq!(Some(local_dns_addr), local_addrs.dns_addr);
+        assert_eq!(Some(remote_dns_addr), remote_addrs.dns_addr);
+        assert_ne!(local_dns_addr, remote_dns_addr);
         assert_ne!(
             local.env.get("HTTP_PROXY"),
             Some(&format!("http://{}", proxy.http_addr()))
@@ -1223,7 +1378,41 @@ mod tests {
         proxy.apply_to_env_for_environment(&mut legacy_env, "local")?;
         assert_eq!(legacy_env, local.env);
 
+        let local_execution =
+            proxy.for_execution("local", "execution-local", "token-local".to_string())?;
+        let remote_execution =
+            proxy.for_execution("remote", "execution-remote", "token-remote".to_string())?;
+        let local_execution =
+            local_execution.prepare_for_optional_environment(HashMap::new(), Some("local"))?;
+        let remote_execution =
+            remote_execution.prepare_for_optional_environment(HashMap::new(), Some("remote"))?;
+        let local_execution_dns_addr = local_execution
+            .env
+            .get(DNS_PROXY_ENV_KEY)
+            .and_then(|value| value.strip_prefix("tcp://"))
+            .and_then(|value| value.parse::<SocketAddr>().ok())
+            .expect("execution-scoped DNS proxy address");
+        let remote_execution_dns_addr = remote_execution
+            .env
+            .get(DNS_PROXY_ENV_KEY)
+            .and_then(|value| value.strip_prefix("tcp://"))
+            .and_then(|value| value.parse::<SocketAddr>().ok())
+            .expect("execution-scoped DNS proxy address");
+        assert_eq!(local_execution_dns_addr, local_dns_addr);
+        assert_eq!(remote_execution_dns_addr, remote_dns_addr);
+        assert!(
+            !local_execution
+                .sandbox_context
+                .loopback_ports
+                .contains(&local_execution_dns_addr.port())
+        );
+
         handle.shutdown().await?;
+        assert!(
+            tokio::net::TcpStream::connect(local_dns_addr)
+                .await
+                .is_err()
+        );
         Ok(())
     }
 
