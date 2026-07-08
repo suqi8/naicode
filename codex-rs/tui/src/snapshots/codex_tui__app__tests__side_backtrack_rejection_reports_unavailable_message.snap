@@ -2,4 +2,4 @@
 source: tui/src/app/tests.rs
 expression: rendered
 ---
-■ Forking from previous turns is unavailable in side conversations.
+■ Editing previous prompts is unavailable in side conversations.

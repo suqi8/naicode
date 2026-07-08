@@ -4,14 +4,15 @@
 //! mediates a key rendering boundary for the transcript overlay.
 //!
 //! Overall goal: keep the main chat view and the transcript overlay in sync while allowing users
-//! to branch from a completed turn. Confirming a selection forks through that canonical turn,
-//! switches the TUI to the fork, and leaves the source thread unchanged.
+//! to edit a prompt from a completed turn. Confirming a selection forks through the immediately
+//! preceding canonical turn, switches the TUI to the branch, and restores the selected prompt in
+//! the composer without changing the source thread.
 //!
 //! Backtrack operates as a small state machine:
 //! - The first `Esc` in the main view "primes" the feature and captures a base thread id.
 //! - A subsequent `Esc` opens the transcript overlay (`Ctrl+T`) and highlights one user message
 //!   for each completed canonical turn.
-//! - `Enter` requests an inclusive fork after the highlighted turn.
+//! - `Enter` requests a fork before the highlighted turn and reopens its prompt for editing.
 //!
 //! The transcript overlay (`Ctrl+T`) renders committed transcript cells plus a render-only live
 //! tail derived from the current in-flight `ChatWidget.active_cell`.
@@ -26,20 +27,23 @@ use std::sync::Arc;
 
 use crate::app::App;
 use crate::app_event::AppEvent;
+use crate::bottom_pane::LocalImageAttachment;
+use crate::chatwidget::UserMessage;
 use crate::history_cell::SessionInfoCell;
 use crate::history_cell::UserHistoryCell;
 use crate::pager_overlay::Overlay;
 use crate::tui;
 use crate::tui::TuiEvent;
 use codex_protocol::ThreadId;
+use codex_protocol::models::local_image_label_text;
 use color_eyre::eyre::Result;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 
-const NO_COMPLETED_TURN_TO_FORK: &str = "No completed turn to fork from.";
-pub(crate) const SIDE_FORK_PREVIOUS_UNAVAILABLE_MESSAGE: &str =
-    "Forking from previous turns is unavailable in side conversations.";
+const NO_PREVIOUS_MESSAGE_TO_EDIT: &str = "No previous message to edit.";
+pub(crate) const SIDE_EDIT_PREVIOUS_UNAVAILABLE_MESSAGE: &str =
+    "Editing previous prompts is unavailable in side conversations.";
 
 /// Aggregates all backtrack-related state used by the App.
 #[derive(Default)]
@@ -60,11 +64,13 @@ pub(crate) struct BacktrackState {
     pub(crate) overlay_preview_active: bool,
 }
 
-/// A completed canonical turn selected as the inclusive endpoint of a fork.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ForkSelection {
+/// A completed canonical turn selected for editing on a source-preserving branch.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BacktrackSelection {
     pub(crate) thread_id: ThreadId,
-    pub(crate) last_turn_id: String,
+    /// Canonical turn immediately before the selected prompt, or `None` for the first prompt.
+    pub(crate) last_turn_id: Option<String>,
+    pub(crate) prompt: UserMessage,
 }
 
 impl App {
@@ -193,7 +199,7 @@ impl App {
         if !has_backtrack_target(&self.transcript_cells, self.chat_widget.active_turn_id()) {
             self.reset_backtrack_state();
             self.chat_widget
-                .add_info_message(NO_COMPLETED_TURN_TO_FORK.to_string(), /*hint*/ None);
+                .add_info_message(NO_PREVIOUS_MESSAGE_TO_EDIT.to_string(), /*hint*/ None);
             tui.frame_requester().schedule_frame();
             return;
         }
@@ -210,7 +216,7 @@ impl App {
         if !has_backtrack_target(&self.transcript_cells, self.chat_widget.active_turn_id()) {
             self.close_transcript_overlay(tui);
             self.chat_widget
-                .add_info_message(NO_COMPLETED_TURN_TO_FORK.to_string(), /*hint*/ None);
+                .add_info_message(NO_PREVIOUS_MESSAGE_TO_EDIT.to_string(), /*hint*/ None);
             tui.frame_requester().schedule_frame();
             return;
         }
@@ -340,13 +346,13 @@ impl App {
         Ok(())
     }
 
-    /// Handle Enter in overlay backtrack preview: fork after the selection and reset state.
+    /// Handle Enter in overlay backtrack preview: branch before the selection and reset state.
     fn overlay_confirm_backtrack(&mut self, tui: &mut tui::Tui) {
         let nth_user_message = self.backtrack.nth_user_message;
-        let selection = self.fork_selection(nth_user_message);
+        let selection = self.backtrack_selection(nth_user_message);
         self.close_transcript_overlay(tui);
         if let Some(selection) = selection {
-            self.apply_fork_selection(selection);
+            self.request_backtrack_fork(selection);
             tui.frame_requester().schedule_frame();
         }
     }
@@ -376,8 +382,8 @@ impl App {
     }
 
     /// Confirm a primed backtrack from the main view (no overlay visible).
-    pub(crate) fn confirm_backtrack_from_main(&mut self) -> Option<ForkSelection> {
-        let selection = self.fork_selection(self.backtrack.nth_user_message);
+    pub(crate) fn confirm_backtrack_from_main(&mut self) -> Option<BacktrackSelection> {
+        let selection = self.backtrack_selection(self.backtrack.nth_user_message);
         self.reset_backtrack_state();
         selection
     }
@@ -423,17 +429,17 @@ impl App {
     pub(crate) fn apply_backtrack_selection(
         &mut self,
         tui: &mut tui::Tui,
-        selection: ForkSelection,
+        selection: BacktrackSelection,
     ) {
-        self.apply_fork_selection(selection);
+        self.request_backtrack_fork(selection);
         tui.frame_requester().schedule_frame();
     }
 
-    fn apply_fork_selection(&mut self, selection: ForkSelection) {
+    fn request_backtrack_fork(&mut self, selection: BacktrackSelection) {
         if self.chat_widget.side_conversation_active() {
             self.reset_backtrack_state();
             self.chat_widget
-                .add_error_message(SIDE_FORK_PREVIOUS_UNAVAILABLE_MESSAGE.to_string());
+                .add_error_message(SIDE_EDIT_PREVIOUS_UNAVAILABLE_MESSAGE.to_string());
             return;
         }
 
@@ -441,30 +447,67 @@ impl App {
             return;
         }
 
-        self.app_event_tx.send(AppEvent::ForkSessionAfterTurn {
+        self.app_event_tx.send(AppEvent::ForkSessionForPromptEdit {
             thread_id: selection.thread_id,
             last_turn_id: selection.last_turn_id,
+            prompt: selection.prompt,
         });
     }
 
-    fn fork_selection(&self, nth_user_message: usize) -> Option<ForkSelection> {
+    pub(crate) fn restore_backtrack_prompt_after_branch_error(
+        &mut self,
+        prompt: UserMessage,
+        err: impl std::fmt::Display,
+    ) {
+        self.chat_widget.restore_user_message_to_composer(prompt);
+        self.chat_widget.add_error_message(format!(
+            "Failed to branch before the selected prompt: {err}"
+        ));
+    }
+
+    fn backtrack_selection(&self, nth_user_message: usize) -> Option<BacktrackSelection> {
         let base_id = self.backtrack.base_id?;
         if self.chat_widget.thread_id() != Some(base_id) {
             return None;
         }
 
-        let last_turn_id = nth_forkable_turn_position(
-            &self.transcript_cells,
-            nth_user_message,
-            self.chat_widget.active_turn_id(),
-        )
-        .and_then(|idx| self.transcript_cells.get(idx))
-        .and_then(|cell| cell.as_any().downcast_ref::<UserHistoryCell>())
-        .and_then(|cell| cell.turn_id.clone())?;
+        let mut positions =
+            forkable_turn_positions_iter(&self.transcript_cells, self.chat_widget.active_turn_id());
+        let (previous_position, selected_position) = if nth_user_message == 0 {
+            (None, positions.next()?)
+        } else {
+            (
+                positions.nth(nth_user_message.saturating_sub(1)),
+                positions.next()?,
+            )
+        };
+        let last_turn_id = previous_position
+            .and_then(|idx| self.transcript_cells.get(idx))
+            .and_then(|cell| cell.as_any().downcast_ref::<UserHistoryCell>())
+            .and_then(|cell| cell.turn_id.clone());
+        let selected = self.transcript_cells[selected_position]
+            .as_any()
+            .downcast_ref::<UserHistoryCell>()?;
+        let local_images = selected
+            .local_image_paths
+            .iter()
+            .enumerate()
+            .map(|(idx, path)| LocalImageAttachment {
+                placeholder: local_image_label_text(idx + 1),
+                path: path.clone(),
+            })
+            .collect();
 
-        Some(ForkSelection {
+        Some(BacktrackSelection {
             thread_id: base_id,
             last_turn_id,
+            prompt: UserMessage {
+                text: selected.message.clone(),
+                local_images,
+                remote_image_urls: selected.remote_image_urls.clone(),
+                text_elements: selected.text_elements.clone(),
+                mention_bindings: Vec::new(),
+            },
         })
     }
 }
@@ -642,7 +685,7 @@ mod tests {
     #[test]
     fn backtrack_unavailable_info_message_snapshot() {
         let cell = crate::history_cell::new_info_event(
-            NO_COMPLETED_TURN_TO_FORK.to_string(),
+            NO_PREVIOUS_MESSAGE_TO_EDIT.to_string(),
             /*hint*/ None,
         );
         let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");

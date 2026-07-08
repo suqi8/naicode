@@ -5011,7 +5011,7 @@ async fn locally_rendered_prompt_anchor_only_updates_latest_user_cell() {
 }
 
 #[tokio::test]
-async fn backtrack_selection_with_duplicate_history_targets_unique_turn() {
+async fn backtrack_selection_targets_predecessor_and_preserves_selected_prompt() {
     let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
 
     let user_cell = |turn_id: &str,
@@ -5110,8 +5110,8 @@ async fn backtrack_selection_with_duplicate_history_targets_unique_turn() {
         user_cell(
             "turn-2",
             &edited_text,
-            edited_text_elements,
-            edited_local_image_paths,
+            edited_text_elements.clone(),
+            edited_local_image_paths.clone(),
             vec!["https://example.com/backtrack.png".to_string()],
         ),
         agent_cell("answer edited"),
@@ -5151,10 +5151,84 @@ async fn backtrack_selection_with_duplicate_history_targets_unique_turn() {
         .expect("backtrack selection");
     assert_eq!(
         selection,
-        crate::app_backtrack::ForkSelection {
+        crate::app_backtrack::BacktrackSelection {
             thread_id: base_id,
-            last_turn_id: "turn-2".to_string(),
+            last_turn_id: Some("turn-1".to_string()),
+            prompt: crate::chatwidget::UserMessage {
+                text: edited_text,
+                local_images: vec![crate::bottom_pane::LocalImageAttachment {
+                    placeholder: placeholder.to_string(),
+                    path: edited_local_image_paths[0].clone(),
+                }],
+                remote_image_urls: vec!["https://example.com/backtrack.png".to_string()],
+                text_elements: edited_text_elements,
+                mention_bindings: Vec::new(),
+            },
         }
+    );
+
+    app.chat_widget
+        .restore_user_message_to_composer(selection.prompt);
+    assert_app_snapshot!(
+        "backtrack_fork_restores_selected_prompt",
+        render_bottom_popup(&app.chat_widget, /*width*/ 80)
+    );
+}
+
+#[tokio::test]
+async fn backtrack_selection_starts_fresh_before_first_prompt() {
+    let (mut app, _app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let base_id = ThreadId::new();
+    app.chat_widget.handle_thread_session(test_thread_session(
+        base_id,
+        test_path_buf("/home/user/project"),
+    ));
+    app.transcript_cells = vec![Arc::new(UserHistoryCell {
+        turn_id: Some("turn-1".to_string()),
+        message: "first question".to_string(),
+        text_elements: Vec::new(),
+        local_image_paths: Vec::new(),
+        remote_image_urls: Vec::new(),
+    })];
+    app.backtrack.base_id = Some(base_id);
+    app.backtrack.primed = true;
+    app.backtrack.nth_user_message = 0;
+
+    let selection = app
+        .confirm_backtrack_from_main()
+        .expect("backtrack selection");
+
+    assert_eq!(
+        selection,
+        crate::app_backtrack::BacktrackSelection {
+            thread_id: base_id,
+            last_turn_id: None,
+            prompt: crate::chatwidget::UserMessage::from("first question"),
+        }
+    );
+}
+
+#[tokio::test]
+async fn backtrack_branch_failure_restores_selected_prompt() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let prompt = crate::chatwidget::UserMessage::from("edit this prompt");
+
+    app.restore_backtrack_prompt_after_branch_error(prompt, "branch unavailable");
+
+    assert_eq!(
+        app.chat_widget.composer_text_with_pending(),
+        "edit this prompt"
+    );
+    let cell = match app_event_rx.try_recv() {
+        Ok(AppEvent::InsertHistoryCell(cell)) => cell,
+        other => panic!("expected InsertHistoryCell event, got {other:?}"),
+    };
+    assert_eq!(
+        cell.display_lines(/*width*/ 80)
+            .into_iter()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>(),
+        vec!["■ Failed to branch before the selected prompt: branch unavailable"]
     );
 }
 

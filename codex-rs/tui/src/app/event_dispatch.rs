@@ -220,9 +220,10 @@ impl App {
 
                 tui.frame_requester().schedule_frame();
             }
-            AppEvent::ForkSessionAfterTurn {
+            AppEvent::ForkSessionForPromptEdit {
                 thread_id,
                 last_turn_id,
+                prompt,
             } => {
                 if self.chat_widget.thread_id() != Some(thread_id) {
                     return Ok(AppRunControl::Continue);
@@ -234,27 +235,35 @@ impl App {
                 );
                 self.refresh_in_memory_config_from_disk_best_effort("forking the thread")
                     .await;
-                match app_server
-                    .fork_thread_after(self.config.clone(), thread_id, last_turn_id)
-                    .await
-                {
+                let started = if let Some(last_turn_id) = last_turn_id {
+                    app_server
+                        .fork_thread_after(self.config.clone(), thread_id, last_turn_id)
+                        .await
+                } else {
+                    app_server
+                        .start_thread_with_session_start_source(
+                            &self.config,
+                            /*session_start_source*/ None,
+                        )
+                        .await
+                };
+                match started {
                     Ok(forked) => {
                         self.shutdown_current_thread(app_server).await;
-                        if let Err(err) = self
+                        match self
                             .replace_chat_widget_with_app_server_thread(
                                 tui, app_server, forked, /*initial_user_message*/ None,
                             )
                             .await
                         {
-                            self.chat_widget.add_error_message(format!(
-                                "Failed to attach to forked app-server thread: {err}"
-                            ));
+                            Ok(()) => self.chat_widget.restore_user_message_to_composer(prompt),
+                            Err(err) => {
+                                self.restore_backtrack_prompt_after_branch_error(prompt, err);
+                            }
                         }
                     }
                     Err(err) => {
-                        self.chat_widget.add_error_message(format!(
-                            "Failed to fork from the selected turn: {err}"
-                        ));
+                        self.restore_backtrack_prompt_after_branch_error(prompt, err);
                     }
                 }
                 tui.frame_requester().schedule_frame();
