@@ -2,6 +2,7 @@ use super::*;
 use codex_app_server_protocol::ConfigWarningNotification;
 use codex_app_server_protocol::RequestId;
 use codex_app_server_protocol::ServerNotification;
+use codex_app_server_protocol::SkillsChangedNotification;
 use codex_app_server_protocol::ThreadRealtimeStartedNotification;
 use codex_protocol::protocol::RealtimeConversationVersion;
 use codex_utils_absolute_path::AbsolutePathBuf;
@@ -218,6 +219,61 @@ async fn experimental_notifications_are_preserved_with_capability() {
     assert!(matches!(
         message.message,
         OutgoingMessage::AppServerNotification(ServerNotification::ThreadRealtimeStarted(_))
+    ));
+}
+
+#[tokio::test]
+async fn thread_scoped_skills_changes_require_experimental_capability() {
+    let connection_id = ConnectionId(14);
+    let (writer_tx, mut writer_rx) = mpsc::channel(1);
+
+    let mut connections = HashMap::new();
+    connections.insert(
+        connection_id,
+        OutboundConnectionState::new(
+            writer_tx,
+            Arc::new(AtomicBool::new(true)),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(RwLock::new(HashSet::new())),
+            /*disconnect_sender*/ None,
+        ),
+    );
+
+    route_outgoing_envelope(
+        &mut connections,
+        OutgoingEnvelope::ToConnection {
+            connection_id,
+            message: OutgoingMessage::AppServerNotification(ServerNotification::SkillsChanged(
+                SkillsChangedNotification {
+                    thread_id: Some("thread-1".to_string()),
+                },
+            )),
+            write_complete_tx: None,
+        },
+    )
+    .await;
+    assert!(writer_rx.try_recv().is_err());
+
+    route_outgoing_envelope(
+        &mut connections,
+        OutgoingEnvelope::ToConnection {
+            connection_id,
+            message: OutgoingMessage::AppServerNotification(ServerNotification::SkillsChanged(
+                SkillsChangedNotification { thread_id: None },
+            )),
+            write_complete_tx: None,
+        },
+    )
+    .await;
+    let message = writer_rx
+        .recv()
+        .await
+        .expect("global skill changes should remain stable");
+    assert!(matches!(
+        message.message,
+        OutgoingMessage::AppServerNotification(ServerNotification::SkillsChanged(
+            SkillsChangedNotification { thread_id: None }
+        ))
     ));
 }
 

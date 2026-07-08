@@ -79,6 +79,14 @@ mod tests {
 
     #[allow(dead_code)]
     #[derive(ExperimentalApi)]
+    enum NestedEnumVariantShape {
+        #[experimental(nested)]
+        Nested(EnumVariantShapes),
+        Stable(EnumVariantShapes),
+    }
+
+    #[allow(dead_code)]
+    #[derive(ExperimentalApi)]
     struct NestedFieldShape {
         #[experimental(nested)]
         inner: Option<EnumVariantShapes>,
@@ -121,6 +129,28 @@ mod tests {
         );
         assert_eq!(
             ExperimentalApiTrait::experimental_reason(&EnumVariantShapes::StableTuple(1)),
+            None
+        );
+    }
+
+    #[test]
+    fn derive_supports_nested_enum_variant_payloads() {
+        assert_eq!(
+            ExperimentalApiTrait::experimental_reason(&NestedEnumVariantShape::Nested(
+                EnumVariantShapes::Tuple(1),
+            )),
+            Some("enum/tuple")
+        );
+        assert_eq!(
+            ExperimentalApiTrait::experimental_reason(&NestedEnumVariantShape::Nested(
+                EnumVariantShapes::StableTuple(1),
+            )),
+            None
+        );
+        assert_eq!(
+            ExperimentalApiTrait::experimental_reason(&NestedEnumVariantShape::Stable(
+                EnumVariantShapes::Tuple(1),
+            )),
             None
         );
     }

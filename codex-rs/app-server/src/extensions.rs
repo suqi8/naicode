@@ -3,6 +3,7 @@ use std::sync::Weak;
 
 use codex_analytics::AnalyticsEventsClient;
 use codex_app_server_protocol::ServerNotification;
+use codex_app_server_protocol::SkillsChangedNotification;
 use codex_app_server_protocol::ThreadGoal;
 use codex_app_server_protocol::ThreadGoalUpdatedNotification;
 use codex_core::NewThread;
@@ -28,6 +29,27 @@ use crate::outgoing_message::OutgoingMessageSender;
 use crate::thread_state::ThreadListenerCommand;
 use crate::thread_state::ThreadStateManager;
 
+pub(crate) async fn send_thread_skills_changed(
+    outgoing: &OutgoingMessageSender,
+    thread_state_manager: &ThreadStateManager,
+    thread_id: ThreadId,
+) {
+    let connection_ids = thread_state_manager
+        .subscribed_connection_ids(thread_id)
+        .await;
+    if connection_ids.is_empty() {
+        return;
+    }
+    outgoing
+        .send_server_notification_to_connections(
+            &connection_ids,
+            ServerNotification::SkillsChanged(SkillsChangedNotification {
+                thread_id: Some(thread_id.to_string()),
+            }),
+        )
+        .await;
+}
+
 pub(crate) struct ThreadExtensionDependencies {
     pub(crate) event_sink: Arc<dyn ExtensionEventSink>,
     pub(crate) auth_manager: Arc<AuthManager>,
@@ -37,6 +59,7 @@ pub(crate) struct ThreadExtensionDependencies {
     pub(crate) goal_service: Arc<GoalService>,
     pub(crate) environment_manager: Arc<EnvironmentManager>,
     pub(crate) executor_skill_provider: Arc<dyn codex_skills_extension::SkillProvider>,
+    pub(crate) skills_catalog_changed: Arc<dyn Fn(ThreadId) + Send + Sync>,
     /// Process-scoped persistence backend for extensions that need stored thread history.
     pub(crate) thread_store: Arc<dyn ThreadStore>,
 }
@@ -57,6 +80,7 @@ where
         goal_service,
         environment_manager,
         executor_skill_provider,
+        skills_catalog_changed,
         thread_store: _thread_store,
     } = dependencies;
     let mut builder = ExtensionRegistryBuilder::<Config>::with_event_sink(event_sink);
@@ -84,7 +108,7 @@ where
         .with_orchestrator_provider(Arc::new(
             codex_skills_extension::OrchestratorSkillProvider::new(),
         ));
-    codex_skills_extension::install_with_providers(
+    codex_skills_extension::install_with_providers_and_catalog_updates(
         &mut builder,
         skill_providers,
         |config: &Config| codex_skills_extension::SkillsExtensionConfig {
@@ -92,6 +116,7 @@ where
             bundled_skills_enabled: config.bundled_skills_enabled(),
             orchestrator_skills_enabled: config.orchestrator_skills_enabled,
         },
+        move |thread_id| skills_catalog_changed(thread_id),
     );
     Arc::new(builder.build())
 }
@@ -183,6 +208,47 @@ mod tests {
     use tokio::time::timeout;
 
     use super::*;
+    use crate::outgoing_message::ConnectionId;
+    use crate::outgoing_message::OutgoingEnvelope;
+    use crate::outgoing_message::OutgoingMessage;
+    use crate::thread_state::ConnectionCapabilities;
+
+    #[tokio::test]
+    async fn thread_skills_changes_only_target_subscribers() {
+        let (outgoing_tx, mut outgoing_rx) = mpsc::channel(4);
+        let outgoing = OutgoingMessageSender::new(outgoing_tx, AnalyticsEventsClient::disabled());
+        let thread_state_manager = ThreadStateManager::new();
+        let thread_id = ThreadId::new();
+        let subscribed_connection_id = ConnectionId(1);
+        thread_state_manager
+            .connection_initialized(subscribed_connection_id, ConnectionCapabilities::default())
+            .await;
+        assert!(
+            thread_state_manager
+                .try_add_connection_to_thread(thread_id, subscribed_connection_id)
+                .await
+        );
+
+        send_thread_skills_changed(&outgoing, &thread_state_manager, thread_id).await;
+
+        let envelope = outgoing_rx.recv().await.expect("notification");
+        assert!(matches!(
+            envelope,
+            OutgoingEnvelope::ToConnection {
+                connection_id,
+                message: OutgoingMessage::AppServerNotification(
+                    ServerNotification::SkillsChanged(SkillsChangedNotification {
+                        thread_id: Some(notified_thread_id),
+                    })
+                ),
+                ..
+            } if connection_id == subscribed_connection_id
+                && notified_thread_id == thread_id.to_string()
+        ));
+
+        send_thread_skills_changed(&outgoing, &thread_state_manager, ThreadId::new()).await;
+        assert!(outgoing_rx.try_recv().is_err());
+    }
 
     #[tokio::test]
     async fn app_server_event_sink_uses_listener_fifo_for_goal_updates_and_clears() {

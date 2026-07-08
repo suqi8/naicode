@@ -1620,6 +1620,7 @@ server_notification_definitions! {
     ThreadDeleted => "thread/deleted" (v2::ThreadDeletedNotification),
     ThreadUnarchived => "thread/unarchived" (v2::ThreadUnarchivedNotification),
     ThreadClosed => "thread/closed" (v2::ThreadClosedNotification),
+    #[experimental(nested)]
     SkillsChanged => "skills/changed" (v2::SkillsChangedNotification),
     ThreadNameUpdated => "thread/name/updated" (v2::ThreadNameUpdatedNotification),
     ThreadGoalUpdated => "thread/goal/updated" (v2::ThreadGoalUpdatedNotification),
@@ -3649,6 +3650,24 @@ mod tests {
         assert_eq!(
             crate::experimental_api::ExperimentalApi::experimental_reason(&cleared),
             None
+        );
+    }
+
+    #[test]
+    fn only_thread_scoped_skills_changed_notifications_are_experimental() {
+        let global =
+            ServerNotification::SkillsChanged(v2::SkillsChangedNotification { thread_id: None });
+        let thread = ServerNotification::SkillsChanged(v2::SkillsChangedNotification {
+            thread_id: Some("thr_123".to_string()),
+        });
+
+        assert_eq!(
+            crate::experimental_api::ExperimentalApi::experimental_reason(&global),
+            None
+        );
+        assert_eq!(
+            crate::experimental_api::ExperimentalApi::experimental_reason(&thread),
+            Some("skills/changed.threadId")
         );
     }
 
