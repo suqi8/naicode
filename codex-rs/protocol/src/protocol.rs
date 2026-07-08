@@ -126,6 +126,7 @@ pub const USER_MESSAGE_BEGIN: &str = "## My request for Codex:";
 pub struct TurnEnvironmentSelection {
     pub environment_id: String,
     pub cwd: PathUri,
+    pub workspace_roots: Vec<PathUri>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -444,10 +445,6 @@ pub struct ConversationSpeechParams {
 pub struct ThreadSettingsOverrides {
     /// Updated fallback `cwd` and environments supplied together as a complete pair.
     pub environments: Option<TurnEnvironmentSelections>,
-
-    /// Updated runtime workspace roots used to materialize symbolic
-    /// `:workspace_roots` filesystem permissions.
-    pub workspace_roots: Option<Vec<AbsolutePathBuf>>,
 
     /// Updated profile-defined workspace roots for status summaries and
     /// per-turn config reconstruction.

@@ -509,8 +509,13 @@ impl ThreadManager {
     pub fn default_environment_selections(
         &self,
         cwd: &AbsolutePathBuf,
+        workspace_roots: &[AbsolutePathBuf],
     ) -> Vec<TurnEnvironmentSelection> {
-        default_thread_environment_selections(self.state.environment_manager.as_ref(), cwd)
+        default_thread_environment_selections(
+            self.state.environment_manager.as_ref(),
+            cwd,
+            workspace_roots,
+        )
     }
 
     pub fn validate_environment_selections(
@@ -654,6 +659,7 @@ impl ThreadManager {
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
+            &config.workspace_roots,
         );
         Box::pin(self.start_thread_with_options(StartThreadOptions {
             config,
@@ -785,6 +791,7 @@ impl ThreadManager {
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
+            &config.workspace_roots,
         );
         let (session_source, thread_source) = initial_history
             .get_resumed_session_sources()
@@ -823,6 +830,7 @@ impl ThreadManager {
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
+            &config.workspace_roots,
         );
         Box::pin(self.state.spawn_thread(
             config,
@@ -856,6 +864,7 @@ impl ThreadManager {
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
+            &config.workspace_roots,
         );
         let (session_source, thread_source) = initial_history
             .get_resumed_session_sources()
@@ -1044,6 +1053,7 @@ impl ThreadManager {
         let environments = default_thread_environment_selections(
             self.state.environment_manager.as_ref(),
             &config.cwd,
+            &config.workspace_roots,
         );
         let agent_control = self.agent_control_for_config(&config);
         Box::pin(self.state.spawn_thread(
@@ -1360,7 +1370,11 @@ impl ThreadManagerState {
         environments: Option<Vec<TurnEnvironmentSelection>>,
     ) -> CodexResult<NewThread> {
         let environments = environments.unwrap_or_else(|| {
-            default_thread_environment_selections(self.environment_manager.as_ref(), &config.cwd)
+            default_thread_environment_selections(
+                self.environment_manager.as_ref(),
+                &config.cwd,
+                &config.workspace_roots,
+            )
         });
         Box::pin(self.spawn_thread_with_source(
             config,
@@ -1399,8 +1413,11 @@ impl ThreadManagerState {
             inherited_environments,
             inherited_exec_policy,
         } = options;
-        let environments =
-            default_thread_environment_selections(self.environment_manager.as_ref(), &config.cwd);
+        let environments = default_thread_environment_selections(
+            self.environment_manager.as_ref(),
+            &config.cwd,
+            &config.workspace_roots,
+        );
         let thread_source = initial_history.get_resumed_thread_source();
         Box::pin(self.spawn_thread_with_source(
             config,
@@ -1442,7 +1459,11 @@ impl ThreadManagerState {
         thread_extension_init: ExtensionDataInit,
     ) -> CodexResult<NewThread> {
         let environments = environments.unwrap_or_else(|| {
-            default_thread_environment_selections(self.environment_manager.as_ref(), &config.cwd)
+            default_thread_environment_selections(
+                self.environment_manager.as_ref(),
+                &config.cwd,
+                &config.workspace_roots,
+            )
         });
         Box::pin(self.spawn_thread_with_source(
             config,
