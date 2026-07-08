@@ -5,6 +5,7 @@ mod plugin_catalog;
 mod session_summary;
 mod startup;
 
+use super::session_lifecycle::ThreadAttachPresentation;
 use super::*;
 use crate::app_backtrack::BacktrackState;
 
@@ -190,6 +191,14 @@ fn bypass_hook_trust_startup_warning_snapshot() {
 
     assert_app_snapshot!("bypass_hook_trust_startup_warning", rendered);
 }
+
+fn app_event_history_text(event: &AppEvent) -> Option<String> {
+    let AppEvent::InsertHistoryCell(cell) = event else {
+        return None;
+    };
+    Some(lines_to_single_string(&cell.display_lines(/*width*/ 120)))
+}
+
 #[tokio::test]
 async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
@@ -206,6 +215,7 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
     app.enqueue_primary_thread_session(
         test_thread_session(thread_id, test_path_buf("/tmp/project")),
         Vec::new(),
+        ThreadAttachPresentation::SessionLineage,
     )
     .await?;
 
@@ -245,6 +255,163 @@ async fn enqueue_primary_thread_session_replays_buffered_approval_after_attach()
 }
 
 #[tokio::test]
+async fn prompt_edit_notice_is_queued_after_replayed_history() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let thread_id = ThreadId::new();
+    let parent_thread_id = ThreadId::new();
+    let mut session = test_thread_session(thread_id, test_path_buf("/tmp/project"));
+    session.forked_from_id = Some(parent_thread_id);
+    session.fork_parent_title = Some("server-parent-title".to_string());
+
+    app.enqueue_primary_thread_session(
+        session,
+        vec![test_turn(
+            "turn-1",
+            TurnStatus::Completed,
+            vec![
+                ThreadItem::UserMessage {
+                    id: "user-1".to_string(),
+                    client_id: None,
+                    content: vec![AppServerUserInput::Text {
+                        text: "retained prompt".to_string(),
+                        text_elements: Vec::new(),
+                    }],
+                },
+                ThreadItem::AgentMessage {
+                    id: "assistant-1".to_string(),
+                    text: "retained answer".to_string(),
+                    phase: None,
+                    memory_citation: None,
+                },
+            ],
+        )],
+        ThreadAttachPresentation::PromptEdit,
+    )
+    .await?;
+
+    let events = std::iter::from_fn(|| app_event_rx.try_recv().ok()).collect::<Vec<_>>();
+    let begin_index = events
+        .iter()
+        .position(|event| matches!(event, AppEvent::BeginInitialHistoryReplayBuffer))
+        .expect("replay should begin");
+    let end_index = events
+        .iter()
+        .position(|event| matches!(event, AppEvent::EndInitialHistoryReplayBuffer))
+        .expect("replay should end");
+    let retained_prompt_index = events
+        .iter()
+        .position(|event| {
+            app_event_history_text(event).is_some_and(|text| text.contains("retained prompt"))
+        })
+        .expect("retained prompt should be replayed");
+    let notice_index = events
+        .iter()
+        .position(|event| {
+            app_event_history_text(event)
+                .is_some_and(|text| text.contains("You’re continuing from this point"))
+        })
+        .expect("prompt edit notice should be emitted");
+
+    assert!(begin_index < retained_prompt_index);
+    assert!(retained_prompt_index < end_index);
+    assert!(end_index < notice_index);
+    assert_eq!(
+        app_event_history_text(&events[notice_index]),
+        Some("• You’re continuing from this point in a new conversation".to_string())
+    );
+    assert!(!events.iter().any(|event| {
+        app_event_history_text(event).is_some_and(|text| text.contains("Thread forked from"))
+    }));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn prompt_edit_notice_is_shown_before_the_first_prompt() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let thread_id = ThreadId::new();
+
+    app.enqueue_primary_thread_session(
+        test_thread_session(thread_id, test_path_buf("/tmp/project")),
+        Vec::new(),
+        ThreadAttachPresentation::PromptEdit,
+    )
+    .await?;
+
+    let events = std::iter::from_fn(|| app_event_rx.try_recv().ok()).collect::<Vec<_>>();
+    let notice = events
+        .iter()
+        .filter_map(app_event_history_text)
+        .find(|text| text.contains("You’re continuing from this point"))
+        .expect("first-prompt edit should emit a branch notice");
+
+    assert_eq!(
+        notice,
+        "• You’re continuing from this point in a new conversation"
+    );
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        AppEvent::BeginInitialHistoryReplayBuffer | AppEvent::EndInitialHistoryReplayBuffer
+    )));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn session_lineage_notice_stays_distinct_from_prompt_edit() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let thread_id = ThreadId::new();
+    let parent_thread_id = ThreadId::new();
+    let mut session = test_thread_session(thread_id, test_path_buf("/tmp/project"));
+    session.forked_from_id = Some(parent_thread_id);
+    session.fork_parent_title = Some("explicit-parent".to_string());
+
+    app.enqueue_primary_thread_session(
+        session,
+        vec![test_turn(
+            "turn-1",
+            TurnStatus::Completed,
+            vec![ThreadItem::UserMessage {
+                id: "user-1".to_string(),
+                client_id: None,
+                content: vec![AppServerUserInput::Text {
+                    text: "forked prompt".to_string(),
+                    text_elements: Vec::new(),
+                }],
+            }],
+        )],
+        ThreadAttachPresentation::SessionLineage,
+    )
+    .await?;
+
+    let events = std::iter::from_fn(|| app_event_rx.try_recv().ok()).collect::<Vec<_>>();
+    let end_index = events
+        .iter()
+        .position(|event| matches!(event, AppEvent::EndInitialHistoryReplayBuffer))
+        .expect("replay should end");
+    let notice_index = events
+        .iter()
+        .position(|event| {
+            app_event_history_text(event).is_some_and(|text| text.contains("Thread forked from"))
+        })
+        .expect("lineage notice should be emitted");
+
+    assert!(end_index < notice_index);
+    assert_eq!(
+        app_event_history_text(&events[notice_index]),
+        Some(format!(
+            "• Thread forked from explicit-parent ({parent_thread_id})"
+        ))
+    );
+    assert!(!events.iter().any(|event| {
+        app_event_history_text(event)
+            .is_some_and(|text| text.contains("You’re continuing from this point"))
+    }));
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn resolved_buffered_approval_does_not_become_actionable_after_drain() -> Result<()> {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     let thread_id = ThreadId::new();
@@ -254,6 +421,7 @@ async fn resolved_buffered_approval_does_not_become_actionable_after_drain() -> 
     app.enqueue_primary_thread_session(
         test_thread_session(thread_id, test_path_buf("/tmp/project")),
         Vec::new(),
+        ThreadAttachPresentation::SessionLineage,
     )
     .await?;
     while app_event_rx.try_recv().is_ok() {}
@@ -351,6 +519,7 @@ async fn enqueue_primary_thread_session_replays_turns_before_initial_prompt_subm
                 }],
             }],
         )],
+        ThreadAttachPresentation::SessionLineage,
     )
     .await?;
 
@@ -4179,8 +4348,12 @@ async fn set_thread_goal_draft_materializes_long_objective_and_confirms_before_p
         .start_thread(app.chat_widget.config_ref())
         .await?;
     let thread_id = started.session.thread_id;
-    app.enqueue_primary_thread_session(started.session, started.turns)
-        .await?;
+    app.enqueue_primary_thread_session(
+        started.session,
+        started.turns,
+        ThreadAttachPresentation::SessionLineage,
+    )
+    .await?;
     let objective = "x".repeat(MAX_THREAD_GOAL_OBJECTIVE_CHARS + 1);
 
     app.set_thread_goal_draft(
@@ -5601,9 +5774,13 @@ async fn interrupt_without_active_turn_is_treated_as_handled() {
             .await
             .expect("thread/start should succeed");
         let thread_id = started.session.thread_id;
-        app.enqueue_primary_thread_session(started.session, started.turns)
-            .await
-            .expect("primary thread should be registered");
+        app.enqueue_primary_thread_session(
+            started.session,
+            started.turns,
+            ThreadAttachPresentation::SessionLineage,
+        )
+        .await
+        .expect("primary thread should be registered");
         let op = AppCommand::interrupt();
 
         let handled = Box::pin(app.try_submit_active_thread_op_via_app_server(
@@ -5634,9 +5811,13 @@ async fn override_turn_context_sends_thread_settings_update() {
         let thread_id = started.session.thread_id;
         let initial_model = started.session.model.clone();
         let initial_effort = started.session.reasoning_effort.clone();
-        app.enqueue_primary_thread_session(started.session, started.turns)
-            .await
-            .expect("primary thread should be registered");
+        app.enqueue_primary_thread_session(
+            started.session,
+            started.turns,
+            ThreadAttachPresentation::SessionLineage,
+        )
+        .await
+        .expect("primary thread should be registered");
         let service_tier = ServiceTier::Fast.request_value().to_string();
         let collaboration_mode = CollaborationMode {
             mode: ModeKind::Plan,

@@ -4,6 +4,7 @@
 //! channels, submits thread-scoped operations through the app server, and replays buffered events
 //! when the visible thread changes.
 
+use super::session_lifecycle::ThreadAttachPresentation;
 use super::*;
 use crate::session_resume::read_session_model;
 
@@ -1090,8 +1091,11 @@ impl App {
         &mut self,
         session: ThreadSessionState,
         turns: Vec<Turn>,
+        presentation: ThreadAttachPresentation,
     ) -> Result<()> {
         let thread_id = session.thread_id;
+        let forked_from_id = session.forked_from_id;
+        let fork_parent_title = session.fork_parent_title.clone();
         self.primary_thread_id = Some(thread_id);
         self.primary_session_configured = Some(session.clone());
         self.upsert_agent_picker_thread(
@@ -1117,6 +1121,17 @@ impl App {
         if should_buffer_initial_replay {
             self.app_event_tx
                 .send(AppEvent::EndInitialHistoryReplayBuffer);
+        }
+        match presentation {
+            ThreadAttachPresentation::SessionLineage => {
+                if let Some(forked_from_id) = forked_from_id {
+                    self.chat_widget
+                        .emit_forked_thread_event(forked_from_id, fork_parent_title);
+                }
+            }
+            ThreadAttachPresentation::PromptEdit => {
+                self.chat_widget.emit_prompt_edit_thread_event();
+            }
         }
         let pending = std::mem::take(&mut self.pending_primary_events);
         for pending_event in pending {

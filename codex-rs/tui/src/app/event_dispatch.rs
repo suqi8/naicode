@@ -4,6 +4,7 @@
 //! actions are delegated to focused app submodules so the central match remains the routing layer.
 
 use super::resize_reflow::trailing_run_start;
+use super::session_lifecycle::ThreadAttachPresentation;
 use super::*;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration_flow::ExternalAgentConfigMigrationFlowOutcome;
@@ -178,7 +179,11 @@ impl App {
                             self.shutdown_current_thread(app_server).await;
                             match self
                                 .replace_chat_widget_with_app_server_thread(
-                                    tui, app_server, forked, /*initial_user_message*/ None,
+                                    tui,
+                                    app_server,
+                                    forked,
+                                    ThreadAttachPresentation::SessionLineage,
+                                    /*initial_user_message*/ None,
                                 )
                                 .await
                             {
@@ -252,7 +257,11 @@ impl App {
                         self.shutdown_current_thread(app_server).await;
                         match self
                             .replace_chat_widget_with_app_server_thread(
-                                tui, app_server, forked, /*initial_user_message*/ None,
+                                tui,
+                                app_server,
+                                forked,
+                                ThreadAttachPresentation::PromptEdit,
+                                /*initial_user_message*/ None,
                             )
                             .await
                         {

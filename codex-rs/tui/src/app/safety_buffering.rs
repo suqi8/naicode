@@ -1,5 +1,6 @@
 //! Safety-buffered turn retries that preserve the source thread.
 
+use super::session_lifecycle::ThreadAttachPresentation;
 use super::*;
 use crate::chatwidget::UserMessage;
 
@@ -108,7 +109,11 @@ impl App {
         self.shutdown_current_thread(app_server).await;
         if let Err(err) = self
             .replace_chat_widget_with_app_server_thread(
-                tui, app_server, started, /*initial_user_message*/ None,
+                tui,
+                app_server,
+                started,
+                ThreadAttachPresentation::SessionLineage,
+                /*initial_user_message*/ None,
             )
             .await
         {
