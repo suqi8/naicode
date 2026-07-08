@@ -950,6 +950,7 @@ async fn server_registered_tools_only_restricts_the_complete_tool_inventory() {
                 )]);
             });
             use_actor_authorized_provider(turn);
+            assert!(!super::tool_suggest_enabled(turn));
         },
         ToolPlanInputs {
             mcp_tools: Some(vec![
@@ -966,8 +967,16 @@ async fn server_registered_tools_only_restricts_the_complete_tool_inventory() {
             tool_suggest_candidates: Some(plugin_candidates(ToolSuggestPresentation::ListTool)),
             extension_tool_executors: vec![Arc::new(DeferredExtensionTool)],
             dynamic_tools: vec![
-                dynamic_tool(/*namespace*/ None, "server_callback", false),
-                dynamic_tool(/*namespace*/ None, "server_deferred", true),
+                dynamic_tool(
+                    /*namespace*/ None,
+                    "server_callback",
+                    /*defer_loading*/ false,
+                ),
+                dynamic_tool(
+                    /*namespace*/ None,
+                    "server_deferred",
+                    /*defer_loading*/ true,
+                ),
             ],
         },
     )
