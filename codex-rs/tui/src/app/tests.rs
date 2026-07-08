@@ -5342,10 +5342,11 @@ async fn backtrack_selection_targets_predecessor_and_preserves_selected_prompt()
 
     app.chat_widget
         .restore_user_message_to_composer(selection.prompt);
-    assert_app_snapshot!(
-        "backtrack_fork_restores_selected_prompt",
-        render_bottom_popup(&app.chat_widget, /*width*/ 80)
+    let rendered = render_bottom_popup(&app.chat_widget, /*width*/ 80).replace(
+        &test_path_display("/home/user/project"),
+        "/home/user/project",
     );
+    assert_app_snapshot!("backtrack_fork_restores_selected_prompt", rendered);
 }
 
 #[tokio::test]
