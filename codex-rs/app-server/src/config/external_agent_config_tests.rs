@@ -1744,10 +1744,15 @@ async fn detect_home_lists_enabled_plugins_from_settings() {
 }
 
 #[tokio::test]
-async fn detect_home_lists_enabled_plugins_from_known_marketplaces_registry() {
+async fn detect_home_uses_materialized_known_marketplace_for_inline_npm_source() {
     let (_root, external_agent_home, codex_home) = fixture_paths();
+    let marketplace_root = external_agent_home
+        .join("plugins")
+        .join("marketplaces")
+        .join("acme-tools");
     fs::create_dir_all(external_agent_home.join("plugins"))
         .expect("create external agent plugins dir");
+    fs::create_dir_all(&marketplace_root).expect("create installed marketplace dir");
     fs::write(
         external_agent_home.join("settings.json"),
         r#"{
@@ -1759,16 +1764,24 @@ async fn detect_home_lists_enabled_plugins_from_known_marketplaces_registry() {
     .expect("write settings");
     fs::write(
         external_agent_home.join(EXTERNAL_AGENT_KNOWN_MARKETPLACES_PATH),
-        r#"{
-          "acme-tools": {
-            "source": {
-              "source": "github",
-              "repo": "acme-corp/external-agent-plugins"
-            },
-            "installLocation": "/tmp/acme-tools",
-            "lastUpdated": "2026-07-09T00:16:23.611Z"
-          }
-        }"#,
+        serde_json::to_string_pretty(&serde_json::json!({
+            "acme-tools": {
+                "source": {
+                    "source": "settings",
+                    "name": "acme-tools",
+                    "plugins": [{
+                        "name": "formatter",
+                        "source": {
+                            "source": "npm",
+                            "package": "@acme/formatter",
+                        },
+                    }],
+                },
+                "installLocation": marketplace_root,
+                "lastUpdated": "2026-07-09T00:16:23.611Z",
+            }
+        }))
+        .expect("serialize known marketplaces"),
     )
     .expect("write known marketplaces");
 

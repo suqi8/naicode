@@ -459,6 +459,14 @@ async fn external_agent_config_import_reinstalls_plugins_from_known_marketplaces
         "enabledPlugins": {
             "missing@debug": true,
             "sample@debug": true,
+        },
+        "extraKnownMarketplaces": {
+            "debug": {
+                "source": {
+                    "source": "file",
+                    "path": marketplace_root.join(".agents/plugins/marketplace.json"),
+                }
+            }
         }
     });
     std::fs::write(
@@ -470,8 +478,8 @@ async fn external_agent_config_import_reinstalls_plugins_from_known_marketplaces
         serde_json::to_string_pretty(&serde_json::json!({
             "debug": {
                 "source": {
-                    "source": "directory",
-                    "path": marketplace_root,
+                    "source": "file",
+                    "path": marketplace_root.join(".agents/plugins/marketplace.json"),
                 },
                 "installLocation": marketplace_root,
                 "lastUpdated": "2026-07-09T00:16:23.611Z",
