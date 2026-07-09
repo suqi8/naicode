@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod auth_env_telemetry;
+pub mod relay;
 pub mod token_data;
 
 mod device_code_auth;
@@ -18,6 +19,16 @@ pub use server::LoginServer;
 pub use server::ServerOptions;
 pub use server::ShutdownHandle;
 pub use server::run_login_server;
+
+// naicode: 酸奶中转站账号层入口。
+pub use relay::RelayLoginError;
+pub use relay::RelayLoginSummary;
+pub use relay::finalize_relay_session;
+pub use relay::oauth::RelayOAuthError;
+pub use relay::oauth::RelayOAuthSummary;
+pub use relay::oauth::run_relay_oauth_login;
+pub use relay::relay_login;
+pub use relay::relay_switch_group;
 pub use success_page::CODEX_OPEN_APP_URL;
 pub use success_page::LoginSuccessPage;
 pub use success_page::LoginSuccessPageBrand;

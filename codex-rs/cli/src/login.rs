@@ -17,8 +17,10 @@ use codex_login::ServerOptions;
 use codex_login::login_with_access_token;
 use codex_login::login_with_api_key;
 use codex_login::logout_with_revoke;
+use codex_login::relay_switch_group;
 use codex_login::run_device_code_login;
 use codex_login::run_login_server;
+use codex_login::run_relay_oauth_login;
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ForcedLoginMethod;
 use codex_utils_cli::CliConfigOverrides;
@@ -220,6 +222,70 @@ pub async fn run_login_with_api_key(
         }
         Err(e) => {
             eprintln!("Error logging in: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// naicode: 浏览器 OAuth 登录。起本地回环 → 打开中转站授权页 → 用户同意
+/// → 换码取 sk 写 auth.json。同步 loopback 在 spawn_blocking 里跑。
+pub async fn run_relay_login(cli_config_overrides: CliConfigOverrides) -> ! {
+    let config = load_config_or_exit(cli_config_overrides).await;
+    let _login_log_guard = init_login_file_logging(&config);
+    tracing::info!("starting naicode relay oauth login flow");
+
+    let codex_home = config.codex_home.clone();
+    let store_mode = config.cli_auth_credentials_store_mode;
+    let keyring = config.auth_keyring_backend_kind();
+
+    let result = tokio::task::spawn_blocking(move || {
+        run_relay_oauth_login(&codex_home, store_mode, keyring, |url| {
+            eprintln!("请在浏览器中完成授权（若未自动打开，请手动访问）：");
+            eprintln!("  {url}");
+        })
+    })
+    .await;
+
+    match result {
+        Ok(Ok(summary)) => {
+            eprintln!("{LOGIN_SUCCESS_MESSAGE}");
+            if !summary.group.is_empty() {
+                eprintln!("当前分组：{}", summary.group);
+            }
+            if !summary.model.is_empty() {
+                eprintln!("默认模型：{}", summary.model);
+            }
+            std::process::exit(0);
+        }
+        Ok(Err(e)) => {
+            eprintln!("登录失败：{e}");
+            std::process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("登录任务异常：{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// naicode: 换分组。走浏览器重新授权并带上目标分组（后端复用同一 key，
+/// 只更新其 group，不新建 key）。这样本地无需长期持有 session cookie。
+pub async fn run_relay_switch_group(
+    cli_config_overrides: CliConfigOverrides,
+    group: String,
+) -> ! {
+    let config = load_config_or_exit(cli_config_overrides).await;
+    let _login_log_guard = init_login_file_logging(&config);
+    let codex_home = config.codex_home.clone();
+
+    // 优先尝试本地直连换组（若 relay.json 里存有可用 session）。
+    match relay_switch_group(&codex_home, &group).await {
+        Ok(()) => {
+            eprintln!("已切换到分组：{group}");
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("本地换组不可用（{e}），请重新授权以切换分组。");
             std::process::exit(1);
         }
     }

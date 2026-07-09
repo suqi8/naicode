@@ -21,6 +21,9 @@ pub use login::run_login_with_chatgpt;
 pub use login::run_login_with_device_code;
 pub use login::run_login_with_device_code_fallback_to_browser;
 pub use login::run_logout;
+// naicode: 酸奶中转站登录/换组入口。
+pub use login::run_relay_login;
+pub use login::run_relay_switch_group;
 
 #[derive(Debug, Default, Args)]
 pub struct SandboxStateArgs {
