@@ -9,6 +9,7 @@
 
 pub mod api;
 pub mod oauth;
+pub mod pricing;
 pub mod state;
 
 use crate::auth::AuthKeyringBackendKind;
