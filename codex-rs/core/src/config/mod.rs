@@ -82,6 +82,7 @@ use codex_mcp::ResolvedMcpCatalog;
 use codex_memories_read::memory_root;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::NEWAPI_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_CHAT_PROVIDER_REMOVED_ERROR;
 use codex_model_provider_info::built_in_model_providers;
 use codex_model_provider_info::merge_configured_model_providers;
@@ -3431,9 +3432,12 @@ impl Config {
             merge_configured_model_providers(built_in_model_providers(openai_base_url), cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
 
+        // naicode: 用户未在 CLI (`--config model_provider=`) 或 config.toml 里
+        // 指定 provider 时，兜底用内置的 newapi（酸奶中转站），实现零配置即用。
+        // 用户显式配置的 provider / model_providers 表仍优先生效，不受影响。
         let model_provider_id = model_provider
             .or(cfg.model_provider)
-            .unwrap_or_else(|| "openai".to_string());
+            .unwrap_or_else(|| NEWAPI_PROVIDER_ID.to_string());
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {

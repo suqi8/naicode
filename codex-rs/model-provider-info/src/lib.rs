@@ -35,6 +35,13 @@ const MAX_REQUEST_MAX_RETRIES: u64 = 100;
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
 const OPENAI_ACTOR_AUTHORIZATION_HEADER: &str = "x-openai-actor-authorization";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
+
+// naicode: 酸奶中转站专用内置 provider。
+// 注意 display name 绝不能是 "OpenAI"——`is_openai()` 靠 name 判定并触发 remote
+// compaction 等 OpenAI 特判逻辑。base_url 带 `/v1`，wire_api 只能 Responses。
+pub const NEWAPI_PROVIDER_ID: &str = "newapi";
+const NEWAPI_PROVIDER_NAME: &str = "Naicode Relay";
+pub const NEWAPI_BASE_URL: &str = "https://closedai.kylenqaq.com/v1";
 pub const CHATGPT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const AMAZON_BEDROCK_PROVIDER_NAME: &str = "Amazon Bedrock";
 pub const AMAZON_BEDROCK_PROVIDER_ID: &str = "amazon-bedrock";
@@ -363,6 +370,36 @@ impl ModelProviderInfo {
         }
     }
 
+    /// naicode: 内置酸奶中转站 provider。
+    /// base_url 写死中转站 `/v1`；requires_openai_auth=true 让首启进登录、
+    /// 并从 auth.json 的 OPENAI_API_KEY 取 `sk-` 走 `Authorization: Bearer`。
+    /// env_key 必须 None（validate() 会拒绝 env_key 与 requires_openai_auth 并存）。
+    pub fn create_newapi_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            name: NEWAPI_PROVIDER_NAME.into(),
+            base_url: Some(NEWAPI_BASE_URL.into()),
+            env_key: None,
+            env_key_instructions: None,
+            experimental_bearer_token: None,
+            auth: None,
+            aws: None,
+            wire_api: WireApi::Responses,
+            query_params: None,
+            http_headers: Some(
+                [("version".to_string(), env!("CARGO_PKG_VERSION").to_string())]
+                    .into_iter()
+                    .collect(),
+            ),
+            env_http_headers: None,
+            request_max_retries: None,
+            stream_max_retries: None,
+            stream_idle_timeout_ms: None,
+            websocket_connect_timeout_ms: None,
+            requires_openai_auth: true,
+            supports_websockets: false,
+        }
+    }
+
     pub fn create_amazon_bedrock_provider(
         aws: Option<ModelProviderAwsAuthInfo>,
     ) -> ModelProviderInfo {
@@ -431,14 +468,14 @@ pub fn built_in_model_providers(
     openai_base_url: Option<String>,
 ) -> HashMap<String, ModelProviderInfo> {
     use ModelProviderInfo as P;
+    let newapi_provider = P::create_newapi_provider();
     let openai_provider = P::create_openai_provider(openai_base_url);
     let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
 
-    // We do not want to be in the business of adjucating which third-party
-    // providers are bundled with Codex CLI, so we only include the OpenAI and
-    // open source ("oss") providers by default. Users are encouraged to add to
-    // `model_providers` in config.toml to add their own providers.
+    // naicode: newapi（酸奶中转站）作为内置默认 provider 排在首位。
+    // 其余保留 OpenAI 及开源 provider，方便高级用户在 config.toml 里改用。
     [
+        (NEWAPI_PROVIDER_ID, newapi_provider),
         (OPENAI_PROVIDER_ID, openai_provider),
         (AMAZON_BEDROCK_PROVIDER_ID, amazon_bedrock_provider),
         (
