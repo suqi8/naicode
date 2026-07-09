@@ -165,7 +165,9 @@ pub(crate) async fn run_turn(
     }
 
     // run_turn owns the step used to seed context and make the first sampling request.
-    let first_step_context = sess.capture_step_context(Arc::clone(&turn_context)).await;
+    let first_step_context = sess
+        .capture_active_step_context(Arc::clone(&turn_context))
+        .await;
     // Keep the exact model-visible state used by this turn and its inline compactions.
     let (mut world_state, display_roots) = tokio::join!(
         sess.record_context_updates_and_set_reference_context_item(first_step_context.as_ref()),
@@ -247,7 +249,10 @@ pub(crate) async fn run_turn(
         // Capture once so context, advertised tools, and tool calls share one request view.
         let step_context = match next_step_context.take() {
             Some(step_context) => step_context,
-            None => sess.capture_step_context(Arc::clone(&turn_context)).await,
+            None => {
+                sess.capture_active_step_context(Arc::clone(&turn_context))
+                    .await
+            }
         };
         let sampling_request_result: CodexResult<_> = async {
             super::time_reminder::maybe_record_current_time_reminder(
@@ -807,7 +812,9 @@ async fn run_pre_sampling_compact(
     // Compact if the configured auto-compaction budget or usable context window is exhausted.
     if token_status.token_limit_reached {
         // Pre-turn compaction runs before run_turn creates the normal sampling step.
-        let step_context = sess.capture_step_context(Arc::clone(turn_context)).await;
+        let step_context = sess
+            .capture_active_step_context(Arc::clone(turn_context))
+            .await;
         run_auto_compact(
             sess,
             step_context,
