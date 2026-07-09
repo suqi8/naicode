@@ -51,6 +51,7 @@ pub struct PartialNetworkConfig {
     pub allow_upstream_proxy: Option<bool>,
     pub dangerously_allow_non_loopback_proxy: Option<bool>,
     pub dangerously_allow_all_unix_sockets: Option<bool>,
+    pub enable_dns: Option<bool>,
     #[serde(default)]
     pub domains: Option<NetworkDomainPermissions>,
     #[serde(default)]
