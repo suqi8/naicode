@@ -586,6 +586,9 @@ impl App {
             AppEvent::OpenRelayGroups { result } => {
                 self.chat_widget.open_relay_groups_list(result);
             }
+            AppEvent::OpenRelayModels { pricing, group } => {
+                self.chat_widget.open_relay_models_list(*pricing, group);
+            }
             AppEvent::RelaySwitchGroup { group } => {
                 let tx = self.app_event_tx.clone();
                 let codex_home = self.chat_widget.config_ref().codex_home.clone();

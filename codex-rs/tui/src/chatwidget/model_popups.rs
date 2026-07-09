@@ -73,15 +73,19 @@ impl ChatWidget {
                     format!("{}（{}）", g.name, g.desc)
                 };
                 let group_name = g.name.clone();
+                let pricing_for_action = pricing.clone();
                 SelectionItem {
                     name,
                     description,
                     actions: vec![Box::new(move |tx| {
-                        tx.send(AppEvent::RelaySwitchGroup {
+                        tx.send(AppEvent::OpenRelayModels {
+                            pricing: Box::new(pricing_for_action.clone()),
                             group: group_name.clone(),
                         });
                     })],
-                    dismiss_on_select: true,
+                    // 选分组不关闭弹层，转入「该分组模型列表」子弹层；
+                    // 子层选定模型后再一并收起父层。
+                    dismiss_parent_on_child_accept: true,
                     ..Default::default()
                 }
             })
@@ -90,8 +94,69 @@ impl ChatWidget {
         self.bottom_pane.show_selection_view(SelectionViewParams {
             title: Some("酸奶中转站分组".to_string()),
             subtitle: Some(
-                "价格 = 模型倍率 × 分组倍率 × 2（¥/1M）；选中分组即切换".to_string(),
+                "价格 = 模型倍率 × 分组倍率 × 2（¥/1M）；选分组后再选该组内的模型".to_string(),
             ),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
+        self.request_redraw();
+    }
+
+    /// 展示某分组下「可用模型 + 价格」列表（只列该分组内的模型，非全部）。
+    /// 选中模型：切到该模型所属分组（隐式换组，不新建 key）并把它设为默认模型。
+    pub(crate) fn open_relay_models_list(
+        &mut self,
+        pricing: codex_login::RelayPricing,
+        group: String,
+    ) {
+        let models = pricing.models_in_group(&group);
+        if models.is_empty() {
+            self.add_info_message(
+                format!("分组「{group}」下暂无可用模型。"),
+                /*hint*/ None,
+            );
+            return;
+        }
+
+        let current_model = self.current_model();
+        let mut items: Vec<SelectionItem> = Vec::new();
+        for m in models {
+            let price = match (
+                pricing.input_price_per_m(m, &group),
+                pricing.output_price_per_m(m, &group),
+            ) {
+                (Some(inp), Some(out)) => {
+                    format!("输入 ¥{inp:.2}/1M · 输出 ¥{out:.2}/1M")
+                }
+                _ => "按次计费".to_string(),
+            };
+            let model_name = m.model_name.clone();
+            let group_for_action = group.clone();
+            let model_for_action = model_name.clone();
+            items.push(SelectionItem {
+                name: model_name.clone(),
+                description: Some(price),
+                is_current: model_name == current_model,
+                actions: vec![Box::new(move |tx| {
+                    // 先隐式换组（改 naicode 令牌的 group），再设默认模型。
+                    tx.send(AppEvent::RelaySwitchGroup {
+                        group: group_for_action.clone(),
+                    });
+                    tx.send(AppEvent::UpdateModel(model_for_action.clone()));
+                    tx.send(AppEvent::PersistModelSelection {
+                        model: model_for_action.clone(),
+                        effort: None,
+                    });
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            });
+        }
+
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            title: Some(format!("分组「{group}」的可用模型")),
+            subtitle: Some("选中即切到该分组并设为默认模型（¥/1M）".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             ..Default::default()

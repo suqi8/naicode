@@ -472,6 +472,13 @@ pub(crate) enum AppEvent {
         result: Result<Box<codex_login::RelayPricing>, String>,
     },
 
+    /// naicode: 用户在分组选择器里选定分组，打开「该分组内可用模型」列表。
+    /// 只列 enable_groups 含该分组的模型，并展示 ¥/1M 价格。
+    OpenRelayModels {
+        pricing: Box<codex_login::RelayPricing>,
+        group: String,
+    },
+
     /// naicode: 用户在分组选择器里选定分组，发起换组（不新建 key）。
     RelaySwitchGroup {
         group: String,
