@@ -39,6 +39,7 @@ fn assert_single_plugin_raw_error(
     raw_errors: &[ExternalAgentConfigImportRawError],
     failure_stage: &str,
     source: &str,
+    error_type: Option<&str>,
 ) {
     assert_eq!(raw_errors.len(), 1);
     let raw_error = &raw_errors[0];
@@ -47,7 +48,7 @@ fn assert_single_plugin_raw_error(
         ExternalAgentConfigMigrationItemType::Plugins
     );
     assert_eq!(raw_error.failure_stage, failure_stage);
-    assert_eq!(raw_error.error_type, None);
+    assert_eq!(raw_error.error_type.as_deref(), error_type);
     assert_eq!(raw_error.cwd, None);
     assert_eq!(raw_error.source.as_deref(), Some(source));
     assert!(!raw_error.message.is_empty());
@@ -1743,6 +1744,63 @@ async fn detect_home_lists_enabled_plugins_from_settings() {
 }
 
 #[tokio::test]
+async fn detect_home_lists_enabled_plugins_from_known_marketplaces_registry() {
+    let (_root, external_agent_home, codex_home) = fixture_paths();
+    fs::create_dir_all(external_agent_home.join("plugins"))
+        .expect("create external agent plugins dir");
+    fs::write(
+        external_agent_home.join("settings.json"),
+        r#"{
+          "enabledPlugins": {
+            "formatter@acme-tools": true
+          }
+        }"#,
+    )
+    .expect("write settings");
+    fs::write(
+        external_agent_home.join(EXTERNAL_AGENT_KNOWN_MARKETPLACES_PATH),
+        r#"{
+          "acme-tools": {
+            "source": {
+              "source": "github",
+              "repo": "acme-corp/external-agent-plugins"
+            },
+            "installLocation": "/tmp/acme-tools",
+            "lastUpdated": "2026-07-09T00:16:23.611Z"
+          }
+        }"#,
+    )
+    .expect("write known marketplaces");
+
+    let items = service_for_paths(external_agent_home.clone(), codex_home)
+        .detect(ExternalAgentConfigDetectOptions {
+            include_home: true,
+            cwds: None,
+        })
+        .await
+        .expect("detect");
+
+    assert_eq!(
+        items,
+        vec![ExternalAgentConfigMigrationItem {
+            item_type: ExternalAgentConfigMigrationItemType::Plugins,
+            description: format!(
+                "Migrate enabled plugins from {}",
+                external_agent_home.join("settings.json").display()
+            ),
+            cwd: None,
+            details: Some(MigrationDetails {
+                plugins: vec![PluginsMigration {
+                    marketplace_name: "acme-tools".to_string(),
+                    plugin_names: vec!["formatter".to_string()],
+                }],
+                ..Default::default()
+            }),
+        }]
+    );
+}
+
+#[tokio::test]
 async fn detect_home_plugins_uses_local_settings_over_project_settings() {
     let (_root, external_agent_home, codex_home) = fixture_paths();
     fs::create_dir_all(&external_agent_home).expect("create external agent home");
@@ -2255,6 +2313,7 @@ async fn import_plugins_requires_source_marketplace_details() {
         &outcome.raw_errors,
         "plugin_import",
         "formatter@other-tools",
+        None,
     );
 }
 
@@ -2290,7 +2349,12 @@ async fn import_plugins_defers_marketplace_source_validation_to_add_marketplace(
         outcome.failed_plugin_ids,
         vec!["formatter@acme-tools".to_string()]
     );
-    assert_single_plugin_raw_error(&outcome.raw_errors, "plugin_import", "formatter@acme-tools");
+    assert_single_plugin_raw_error(
+        &outcome.raw_errors,
+        "plugin_import",
+        "formatter@acme-tools",
+        None,
+    );
 }
 
 #[tokio::test]
@@ -2610,6 +2674,7 @@ async fn import_plugins_infers_external_official_marketplace_when_missing_from_s
         &outcome.raw_errors,
         "plugin_import",
         &format!("sample@{EXTERNAL_OFFICIAL_MARKETPLACE_NAME}"),
+        Some("plugin_not_found"),
     );
 }
 
