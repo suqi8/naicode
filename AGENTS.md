@@ -1,3 +1,27 @@
+# naicode —— 酸奶中转站专用 CLI（fork 自 openai/codex）
+
+**这个仓库不是 openai/codex 本身，是它的 fork「naicode」。** 目标：把 Codex CLI 改成
+「酸奶中转站」(https://closedai.kylenqaq.com，基于 new-api) 专用命令行工具，发布为
+npm 包 `naicode`（`npm i -g naicode`），GitHub `suqi8/naicode`，只发包不发源码。
+
+关键约束（改动时务必遵守）：
+- 内置默认 provider `newapi`：base_url 写死 `https://closedai.kylenqaq.com/v1`，
+  `wire_api = Responses`，`requires_openai_auth = true`，且为**默认** provider，用户零配置即用。
+  用户在 config.toml 里自定义的 `model_provider` / `model_providers` 仍优先生效，不能锁死。
+- 鉴权走**浏览器 OAuth**：naicode 起本地 loopback → 跳中转站授权页(用户已登录点同意) →
+  一次性 code 换 `sk-xxx` → 写入 `~/.naicode/auth.json` 的 `OPENAI_API_KEY`。
+  中转站授权端点在 new-api 后端(源码 `C:\Users\pc\new-api-src`，服务器 8.212.180.123)。
+- **只建一个名为 `naicode` 的 key**；**换分组不新建 key**，走 `PUT /api/token/` 改 group 字段。
+- 中转站有**分组**概念，每个分组倍率不同 → TUI 里要能切模型时同时看/选分组、看倍率和价格。
+- 配置目录用 `~/.naicode`（改默认目录字面量，但**保留 `CODEX_HOME` 环境变量名**，它被多处硬编码）。
+- 品牌 codex→naicode；金额按人民币，不写美元汇率；明文 key 不落日志、不长期驻留。
+- 中转站 API 契约见 `../naicode-交接文档.md`；账号层逻辑翻译自姊妹项目
+  `../cc-switch/src-tauri/src/proxy/providers/newapi_auth.rs`。
+
+以下为继承自上游 codex-rs 的 Rust 编码规范，写代码时仍然适用：
+
+---
+
 # Rust/codex-rs
 
 In the codex-rs folder where the rust code lives:
