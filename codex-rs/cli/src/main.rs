@@ -88,7 +88,7 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::user_input::UserInput;
 use codex_terminal_detection::TerminalName;
 
-/// naicode CLI —— 酸奶中转站专用（fork 自 Codex）
+/// naicode CLI —— 酸奶中转站专用命令行编程助手
 ///
 /// If no subcommand is specified, options will be forwarded to the interactive CLI.
 #[derive(Debug, Parser)]

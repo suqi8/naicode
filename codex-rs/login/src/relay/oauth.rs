@@ -14,7 +14,6 @@ use crate::auth::login_with_api_key;
 use crate::relay::api::RELAY_BASE_URL;
 use crate::relay::state::RelayState;
 use codex_config::types::AuthCredentialsStoreMode;
-use std::io::Read as _;
 use std::path::Path;
 use std::time::Duration;
 
@@ -242,11 +241,4 @@ box-shadow:0 4px 24px rgba(0,0,0,.08)}}h1{{color:#e8a04b;margin:0 0 .5rem}}\
         resp.add_header(h);
     }
     let _ = request.respond(resp);
-}
-
-/// 消费一个请求体（tiny_http 要求读完，否则连接可能挂）。
-#[allow(dead_code)]
-fn drain_body(request: &mut tiny_http::Request) {
-    let mut buf = Vec::new();
-    let _ = request.as_reader().read_to_end(&mut buf);
 }
