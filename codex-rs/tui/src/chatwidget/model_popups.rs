@@ -32,6 +32,73 @@ impl ChatWidget {
         self.open_model_popup_with_presets(presets);
     }
 
+    /// naicode: 打开酸奶中转站分组选择器。分组/倍率/价格从公开的
+    /// `/api/pricing` 动态拉取（不硬编码），拉到后经 AppEvent 回来渲染。
+    pub(crate) fn open_relay_group_popup(&mut self) {
+        self.add_info_message("正在获取酸奶中转站分组与价格…".to_string(), /*hint*/ None);
+        let tx = self.app_event_tx.clone();
+        tokio::spawn(async move {
+            let result = codex_login::fetch_pricing().await.map(Box::new);
+            tx.send(AppEvent::OpenRelayGroups { result });
+        });
+    }
+
+    /// 收到定价数据后展示分组选择器：每个分组列出倍率与可用模型数，
+    /// 选中即发起换组（不新建 key）。
+    pub(crate) fn open_relay_groups_list(
+        &mut self,
+        result: Result<Box<codex_login::RelayPricing>, String>,
+    ) {
+        let pricing = match result {
+            Ok(p) => *p,
+            Err(e) => {
+                self.add_info_message(format!("获取分组失败：{e}"), /*hint*/ None);
+                return;
+            }
+        };
+        let groups = pricing.groups();
+        if groups.is_empty() {
+            self.add_info_message("当前没有可用分组。".to_string(), /*hint*/ None);
+            return;
+        }
+
+        let items: Vec<SelectionItem> = groups
+            .iter()
+            .map(|g| {
+                let model_count = pricing.models_in_group(&g.name).len();
+                let description = Some(format!("倍率 {} · {model_count} 个可用模型", g.ratio));
+                let name = if g.desc.is_empty() {
+                    g.name.clone()
+                } else {
+                    format!("{}（{}）", g.name, g.desc)
+                };
+                let group_name = g.name.clone();
+                SelectionItem {
+                    name,
+                    description,
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::RelaySwitchGroup {
+                            group: group_name.clone(),
+                        });
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            title: Some("酸奶中转站分组".to_string()),
+            subtitle: Some(
+                "价格 = 模型倍率 × 分组倍率 × 2（¥/1M）；选中分组即切换".to_string(),
+            ),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
+        self.request_redraw();
+    }
+
     fn model_menu_header(&self, title: &str, subtitle: &str) -> Box<dyn Renderable> {
         let title = title.to_string();
         let subtitle = subtitle.to_string();

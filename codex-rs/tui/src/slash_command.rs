@@ -13,6 +13,8 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
+    // naicode: 酸奶中转站分组切换 + 倍率/价格查看。
+    Relay,
     Ide,
     Permissions,
     Keymap,
@@ -114,6 +116,7 @@ impl SlashCommand {
             SlashCommand::MemoryDrop => "DO NOT USE",
             SlashCommand::MemoryUpdate => "DO NOT USE",
             SlashCommand::Model => "choose what model and reasoning effort to use",
+            SlashCommand::Relay => "切换酸奶中转站分组，查看各分组倍率与模型价格",
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
@@ -205,7 +208,8 @@ impl SlashCommand {
             | SlashCommand::Clear
             | SlashCommand::Logout
             | SlashCommand::MemoryDrop
-            | SlashCommand::MemoryUpdate => false,
+            | SlashCommand::MemoryUpdate
+            | SlashCommand::Relay => false,
             SlashCommand::Diff
             | SlashCommand::Resume
             | SlashCommand::Model

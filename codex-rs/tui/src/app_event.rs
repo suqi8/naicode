@@ -466,6 +466,22 @@ pub(crate) enum AppEvent {
         response: PluginListResponse,
     },
 
+    /// naicode: 酸奶中转站分组/价格数据拉取完成，打开分组选择器。
+    /// `Err` 携带失败原因，用于提示用户。
+    OpenRelayGroups {
+        result: Result<Box<codex_login::RelayPricing>, String>,
+    },
+
+    /// naicode: 用户在分组选择器里选定分组，发起换组（不新建 key）。
+    RelaySwitchGroup {
+        group: String,
+    },
+
+    /// naicode: 换组完成，回显结果（Ok 携带分组名，Err 携带原因）。
+    RelayGroupSwitched {
+        result: Result<String, String>,
+    },
+
     /// Result of explicitly fetching remote-backed plugin sections.
     PluginRemoteSectionsLoaded {
         cwd: PathBuf,

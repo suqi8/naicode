@@ -583,6 +583,33 @@ impl App {
             AppEvent::OpenPluginsList { cwd, response } => {
                 self.chat_widget.open_plugins_list(cwd, response);
             }
+            AppEvent::OpenRelayGroups { result } => {
+                self.chat_widget.open_relay_groups_list(result);
+            }
+            AppEvent::RelaySwitchGroup { group } => {
+                let tx = self.app_event_tx.clone();
+                let codex_home = self.chat_widget.config_ref().codex_home.clone();
+                let group_for_msg = group.clone();
+                tokio::runtime::Handle::current().spawn(async move {
+                    let result = codex_login::relay_switch_group(&codex_home, &group)
+                        .await
+                        .map(|_| group_for_msg)
+                        .map_err(|e| e.to_string());
+                    tx.send(AppEvent::RelayGroupSwitched { result });
+                });
+            }
+            AppEvent::RelayGroupSwitched { result } => match result {
+                Ok(group) => {
+                    self.chat_widget
+                        .add_info_message(format!("已切换到分组：{group}"), /*hint*/ None);
+                }
+                Err(e) => {
+                    self.chat_widget.add_info_message(
+                        format!("换组失败（{e}）。请运行 `naicode login` 重新授权并在授权页选择分组。"),
+                        /*hint*/ None,
+                    );
+                }
+            },
             AppEvent::PluginRemoteSectionsLoaded {
                 cwd,
                 marketplaces,
