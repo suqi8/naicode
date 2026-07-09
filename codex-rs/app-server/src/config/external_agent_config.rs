@@ -1050,31 +1050,70 @@ impl ExternalAgentConfigService {
         let known_marketplaces_path = self
             .external_agent_home
             .join(EXTERNAL_AGENT_KNOWN_MARKETPLACES_PATH);
-        let mut import_sources = match read_external_settings(&known_marketplaces_path) {
-            Ok(Some(known_marketplaces)) => collect_marketplace_import_sources(
-                &known_marketplaces,
-                self.external_agent_home.as_path(),
-            ),
-            Ok(None) => BTreeMap::new(),
+        let known_marketplaces = match read_external_settings(&known_marketplaces_path) {
+            Ok(known_marketplaces) => known_marketplaces,
             Err(err) => {
                 tracing::warn!(
                     path = %known_marketplaces_path.display(),
                     error = %err,
                     "ignoring invalid external agent marketplace registry"
                 );
-                BTreeMap::new()
+                None
             }
         };
+        let mut import_sources = known_marketplaces
+            .as_ref()
+            .map(|known_marketplaces| {
+                collect_marketplace_import_sources(
+                    known_marketplaces,
+                    self.external_agent_home.as_path(),
+                )
+            })
+            .unwrap_or_default();
 
         if let Some(extra_known_marketplaces) = settings
             .as_object()
             .and_then(|settings| settings.get("extraKnownMarketplaces"))
         {
-            for (name, source) in
-                collect_marketplace_import_sources(extra_known_marketplaces, source_root)
-            {
-                import_sources.entry(name).or_insert(source);
+            let mut scoped_marketplaces = extra_known_marketplaces.clone();
+            if let Some(scoped_marketplaces) = scoped_marketplaces.as_object_mut() {
+                for (name, scoped_marketplace) in scoped_marketplaces {
+                    import_sources.remove(name);
+                    let Some(known_marketplace) = known_marketplaces
+                        .as_ref()
+                        .and_then(JsonValue::as_object)
+                        .and_then(|known_marketplaces| known_marketplaces.get(name))
+                    else {
+                        continue;
+                    };
+                    if scoped_marketplace.get("source") != known_marketplace.get("source") {
+                        continue;
+                    }
+                    let Some(install_location) = known_marketplace
+                        .get("installLocation")
+                        .and_then(JsonValue::as_str)
+                    else {
+                        continue;
+                    };
+                    let install_location = Path::new(install_location);
+                    let install_location = if install_location.is_absolute() {
+                        install_location.to_path_buf()
+                    } else {
+                        self.external_agent_home.join(install_location)
+                    };
+                    let Some(scoped_marketplace) = scoped_marketplace.as_object_mut() else {
+                        continue;
+                    };
+                    scoped_marketplace.insert(
+                        "installLocation".to_string(),
+                        JsonValue::String(install_location.display().to_string()),
+                    );
+                }
             }
+            import_sources.extend(collect_marketplace_import_sources(
+                &scoped_marketplaces,
+                source_root,
+            ));
         }
 
         if has_enabled_plugin_for_marketplace(settings, EXTERNAL_OFFICIAL_MARKETPLACE_NAME)
@@ -1539,45 +1578,62 @@ fn collect_marketplace_import_sources(
                     } else {
                         value.as_object()?
                     };
-                    let install_location = value
+                    let source_kind = source_fields
+                        .get("source")
+                        .and_then(JsonValue::as_str)
+                        .map(str::trim);
+                    let declared_source = match source_kind {
+                        Some("github") => source_fields.get("repo"),
+                        Some("git") => source_fields.get("url"),
+                        Some("directory" | "local") => source_fields.get("path"),
+                        Some("file" | "url" | "npm" | "settings") => None,
+                        Some(_) => source_fields.get("source"),
+                        None => source_fields
+                            .get("repo")
+                            .or_else(|| source_fields.get("url"))
+                            .or_else(|| source_fields.get("path"))
+                            .or_else(|| value.get("source")),
+                    }
+                    .and_then(JsonValue::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty());
+                    let materialized_source = value
                         .get("installLocation")
                         .and_then(JsonValue::as_str)
                         .map(str::trim)
-                        .filter(|value| {
+                        .filter(|value| !value.is_empty())
+                        .and_then(|value| {
                             let path = Path::new(value);
                             let path = if path.is_absolute() {
                                 path.to_path_buf()
                             } else {
                                 source_root.join(path)
                             };
-                            path.is_dir()
+                            path.is_dir().then(|| path.display().to_string())
                         });
-                    let source = install_location
-                        .or_else(|| {
-                            source_fields
-                                .get("repo")
-                                .or_else(|| source_fields.get("url"))
-                                .or_else(|| source_fields.get("path"))
-                                .or_else(|| value.get("source"))
-                                .and_then(JsonValue::as_str)
-                                .map(str::trim)
-                        })?
-                        .to_string();
-                    if source.is_empty() {
-                        return None;
-                    }
-                    let source = resolve_external_marketplace_source(&source, source_root);
-
-                    let ref_name = if install_location.is_some() {
-                        None
-                    } else {
-                        source_fields
+                    let (source, ref_name) = if let Some(source) = declared_source {
+                        let source = if matches!(source_kind, Some("directory" | "local")) {
+                            let path = Path::new(source);
+                            if path.is_absolute() {
+                                path.to_path_buf()
+                            } else {
+                                source_root.join(path)
+                            }
+                            .display()
+                            .to_string()
+                        } else {
+                            resolve_external_marketplace_source(source, source_root)
+                        };
+                        let ref_name = source_fields
                             .get("ref")
                             .or_else(|| value.get("ref"))
                             .and_then(JsonValue::as_str)
                             .map(str::trim)
                             .filter(|value| !value.is_empty())
-                            .map(ToOwned::to_owned)
+                            .map(ToOwned::to_owned);
+                        (source, ref_name)
+                    } else {
+                        (materialized_source?, None)
                     };
 
                     Some((name.clone(), MarketplaceImportSource { source, ref_name }))

@@ -1758,6 +1758,21 @@ async fn detect_home_uses_materialized_known_marketplace_for_inline_npm_source()
         r#"{
           "enabledPlugins": {
             "formatter@acme-tools": true
+          },
+          "extraKnownMarketplaces": {
+            "acme-tools": {
+              "source": {
+                "source": "settings",
+                "name": "acme-tools",
+                "plugins": [{
+                  "name": "formatter",
+                  "source": {
+                    "source": "npm",
+                    "package": "@acme/formatter"
+                  }
+                }]
+              }
+            }
           }
         }"#,
     )
@@ -1777,7 +1792,7 @@ async fn detect_home_uses_materialized_known_marketplace_for_inline_npm_source()
                         },
                     }],
                 },
-                "installLocation": marketplace_root,
+                "installLocation": "plugins/marketplaces/acme-tools",
                 "lastUpdated": "2026-07-09T00:16:23.611Z",
             }
         }))
@@ -1810,6 +1825,84 @@ async fn detect_home_uses_materialized_known_marketplace_for_inline_npm_source()
                 ..Default::default()
             }),
         }]
+    );
+}
+
+#[test]
+fn marketplace_import_sources_prefers_scoped_source_over_registry_name_collision() {
+    let (root, external_agent_home, codex_home) = fixture_paths();
+    let source_root = root.path().join("repo");
+    let scoped_marketplace = source_root.join("repo-marketplace");
+    let cached_marketplace = external_agent_home.join("plugins/marketplaces/debug");
+    fs::create_dir_all(&scoped_marketplace).expect("create scoped marketplace");
+    fs::create_dir_all(&cached_marketplace).expect("create cached marketplace");
+    fs::write(
+        external_agent_home.join(EXTERNAL_AGENT_KNOWN_MARKETPLACES_PATH),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "debug": {
+                "source": {
+                    "source": "github",
+                    "repo": "acme/global-marketplace",
+                },
+                "installLocation": cached_marketplace,
+            }
+        }))
+        .expect("serialize known marketplaces"),
+    )
+    .expect("write known marketplaces");
+    let settings = serde_json::json!({
+        "extraKnownMarketplaces": {
+            "debug": {
+                "source": {
+                    "source": "directory",
+                    "path": "./repo-marketplace",
+                }
+            }
+        }
+    });
+
+    let import_sources = service_for_paths(external_agent_home, codex_home)
+        .marketplace_import_sources(&settings, &source_root);
+
+    assert_eq!(
+        import_sources.get("debug"),
+        Some(&MarketplaceImportSource {
+            source: source_root.join("./repo-marketplace").display().to_string(),
+            ref_name: None,
+        })
+    );
+}
+
+#[test]
+fn marketplace_import_sources_prefers_supported_declaration_over_materialization() {
+    let (_root, external_agent_home, codex_home) = fixture_paths();
+    let cached_marketplace = external_agent_home.join("plugins/marketplaces/acme-tools");
+    fs::create_dir_all(&cached_marketplace).expect("create cached marketplace");
+    fs::write(
+        external_agent_home.join(EXTERNAL_AGENT_KNOWN_MARKETPLACES_PATH),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "acme-tools": {
+                "source": {
+                    "source": "git",
+                    "url": "https://git.example.com/acme/tools.git",
+                    "ref": "release",
+                },
+                "installLocation": cached_marketplace,
+            }
+        }))
+        .expect("serialize known marketplaces"),
+    )
+    .expect("write known marketplaces");
+
+    let import_sources = service_for_paths(external_agent_home.clone(), codex_home)
+        .marketplace_import_sources(&serde_json::json!({}), &external_agent_home);
+
+    assert_eq!(
+        import_sources.get("acme-tools"),
+        Some(&MarketplaceImportSource {
+            source: "https://git.example.com/acme/tools.git".to_string(),
+            ref_name: Some("release".to_string()),
+        })
     );
 }
 
@@ -2326,7 +2419,7 @@ async fn import_plugins_requires_source_marketplace_details() {
         &outcome.raw_errors,
         "plugin_import",
         "formatter@other-tools",
-        None,
+        /*error_type*/ None,
     );
 }
 
@@ -2366,7 +2459,7 @@ async fn import_plugins_defers_marketplace_source_validation_to_add_marketplace(
         &outcome.raw_errors,
         "plugin_import",
         "formatter@acme-tools",
-        None,
+        /*error_type*/ None,
     );
 }
 
