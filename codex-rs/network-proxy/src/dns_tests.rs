@@ -75,7 +75,7 @@ async fn query_listener(
         ));
     }
 
-    let query = query(name, RecordType::A, 16);
+    let query = query(name, RecordType::A, /*id*/ 16);
     let query_len = u16::try_from(query.len()).expect("bounded DNS query length");
     stream.write_all(&query_len.to_be_bytes()).await?;
     stream.write_all(&query).await?;
@@ -105,7 +105,7 @@ async fn resolves_allowed_a_and_aaaa_queries_with_bounded_answers() {
     ] {
         let wire = resolve_query_with_lookup(
             &state,
-            &query("example.test", record_type, 7),
+            &query("example.test", record_type, /*id*/ 7),
             Some("127.0.0.1:1234"),
             |_| {
                 let addresses = addresses.clone();
@@ -136,8 +136,8 @@ async fn synthesized_response_never_exceeds_classic_udp_size() {
         .collect::<Vec<_>>();
     let wire = resolve_query_with_lookup(
         &state,
-        &query("many.example.test", RecordType::AAAA, 7),
-        None,
+        &query("many.example.test", RecordType::AAAA, /*id*/ 7),
+        /*client_addr*/ None,
         |_| async move { Ok(addresses) },
     )
     .await;
@@ -154,13 +154,18 @@ async fn denied_name_is_not_sent_to_the_host_resolver() {
     let state = network_proxy_state_for_policy(settings(&["allowed.test"], &[]));
     let lookups = Arc::new(AtomicUsize::new(0));
     let response = response(
-        resolve_query_with_lookup(&state, &query("denied.test", RecordType::A, 8), None, {
-            let lookups = Arc::clone(&lookups);
-            move |_| async move {
-                lookups.fetch_add(1, Ordering::SeqCst);
-                Ok(Vec::new())
-            }
-        })
+        resolve_query_with_lookup(
+            &state,
+            &query("denied.test", RecordType::A, /*id*/ 8),
+            /*client_addr*/ None,
+            {
+                let lookups = Arc::clone(&lookups);
+                move |_| async move {
+                    lookups.fetch_add(1, Ordering::SeqCst);
+                    Ok(Vec::new())
+                }
+            },
+        )
         .await,
     );
 
@@ -174,8 +179,8 @@ async fn refuses_entire_answer_set_when_resolution_contains_a_private_address() 
     let response = response(
         resolve_query_with_lookup(
             &state,
-            &query("example.test", RecordType::A, 9),
-            None,
+            &query("example.test", RecordType::A, /*id*/ 9),
+            /*client_addr*/ None,
             |_| async {
                 Ok(vec![
                     "93.184.216.34".parse().expect("public address"),
@@ -196,8 +201,8 @@ async fn explicitly_allowlisted_local_literal_preserves_local_policy_semantics()
     let response = response(
         resolve_query_with_lookup(
             &state,
-            &query("127.0.0.1", RecordType::A, 9),
-            None,
+            &query("127.0.0.1", RecordType::A, /*id*/ 9),
+            /*client_addr*/ None,
             |_| async { Ok(vec!["127.0.0.1".parse().expect("loopback address")]) },
         )
         .await,
@@ -213,8 +218,8 @@ async fn policy_changes_apply_without_restarting_the_dns_service() {
     let allowed = response(
         resolve_query_with_lookup(
             &state,
-            &query("example.test", RecordType::A, 10),
-            None,
+            &query("example.test", RecordType::A, /*id*/ 10),
+            /*client_addr*/ None,
             |_| async { Ok(vec!["93.184.216.34".parse().expect("public address")]) },
         )
         .await,
@@ -237,8 +242,8 @@ async fn policy_changes_apply_without_restarting_the_dns_service() {
     let denied = response(
         resolve_query_with_lookup(
             &state,
-            &query("example.test", RecordType::A, 11),
-            None,
+            &query("example.test", RecordType::A, /*id*/ 11),
+            /*client_addr*/ None,
             |_| async { Ok(vec!["93.184.216.34".parse().expect("public address")]) },
         )
         .await,
@@ -266,13 +271,18 @@ async fn live_disable_is_a_proxy_state_denial_without_host_lookup() {
     let lookups = Arc::new(AtomicUsize::new(0));
     let (response, events) = capture_events(|| async {
         response(
-            resolve_query_with_lookup(&state, &query("example.test", RecordType::A, 12), None, {
-                let lookups = Arc::clone(&lookups);
-                move |_| async move {
-                    lookups.fetch_add(1, Ordering::SeqCst);
-                    Ok(Vec::new())
-                }
-            })
+            resolve_query_with_lookup(
+                &state,
+                &query("example.test", RecordType::A, /*id*/ 12),
+                /*client_addr*/ None,
+                {
+                    let lookups = Arc::clone(&lookups);
+                    move |_| async move {
+                        lookups.fetch_add(1, Ordering::SeqCst);
+                        Ok(Vec::new())
+                    }
+                },
+            )
             .await,
         )
     })
@@ -295,8 +305,8 @@ async fn resolver_errors_are_not_reported_as_policy_denials() {
         let response = response(
             resolve_query_with_lookup(
                 &state,
-                &query("example.test", RecordType::A, 12),
-                None,
+                &query("example.test", RecordType::A, /*id*/ 12),
+                /*client_addr*/ None,
                 |_| async { Err(io::Error::other("resolver unavailable")) },
             )
             .await,
@@ -329,15 +339,21 @@ async fn refuses_unsupported_and_untrusted_query_shapes() {
         RecordType::AAAA,
     ));
     let queries = [
-        query("example.test", RecordType::CNAME, 12),
-        query("example.test", RecordType::TXT, 13),
+        query("example.test", RecordType::CNAME, /*id*/ 12),
+        query("example.test", RecordType::TXT, /*id*/ 13),
         multi_question.to_vec().expect("serialize query"),
         vec![0, 14, 0xff],
     ];
 
     for query in queries {
         let response = response(
-            resolve_query_with_lookup(&state, &query, None, |_| async { Ok(Vec::new()) }).await,
+            resolve_query_with_lookup(
+                &state,
+                &query,
+                /*client_addr*/ None,
+                |_| async { Ok(Vec::new()) },
+            )
+            .await,
         );
         assert_eq!(response.response_code(), ResponseCode::Refused);
         assert_eq!(response.answers(), &[]);
@@ -373,7 +389,7 @@ async fn denied_query_is_audited_and_reported_with_execution_attribution() {
     let (_, events) = capture_events(|| async {
         resolve_query_with_lookup(
             &attributed,
-            &query("denied.test", RecordType::A, 15),
+            &query("denied.test", RecordType::A, /*id*/ 15),
             Some("127.0.0.1:1234"),
             |_| async { Ok(Vec::new()) },
         )
@@ -407,7 +423,7 @@ async fn listener_accepts_unscoped_policy_and_binds_attributed_execution() {
         Some("local".to_string()),
     ));
 
-    let unscoped = query_listener(addr, None, "127.0.0.1")
+    let unscoped = query_listener(addr, /*attribution_token*/ None, "127.0.0.1")
         .await
         .expect("unscoped DNS query");
     assert_eq!(unscoped.response_code(), ResponseCode::NoError);
