@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
+use tracing::Instrument;
 
 use crate::ExecServerRuntimePaths;
 use crate::client::http_client::PendingReqwestHttpBodyStream;
@@ -59,6 +60,7 @@ use crate::rpc::invalid_request;
 use crate::server::file_system_handler::FileSystemHandler;
 use crate::server::session_registry::SessionHandle;
 use crate::server::session_registry::SessionRegistry;
+use crate::trace_context::set_current_trace_context_as_parent;
 
 pub(crate) struct ExecServerHandler {
     session_registry: Arc<SessionRegistry>,
@@ -390,13 +392,27 @@ impl ExecServerHandler {
         let handler = Arc::clone(self);
         let notifications = self.notifications.clone();
         let shutdown = self.background_task_shutdown.clone();
-        self.background_tasks.spawn(async move {
-            tokio::select! {
-                _ = shutdown.cancelled() => {}
-                _ = ReqwestHttpRequestRunner::stream_body(pending_stream, notifications) => {}
+        let stream_span = tracing::info_span!(
+            parent: None,
+            "codex.exec_server.http_response_body",
+            otel.kind = "internal",
+            exec_server.http_request_id = request_id,
+            result = tracing::field::Empty,
+            error.type = tracing::field::Empty,
+        );
+        set_current_trace_context_as_parent(&stream_span);
+        self.background_tasks.spawn(
+            async move {
+                tokio::select! {
+                    _ = shutdown.cancelled() => {
+                        tracing::Span::current().record("result", "cancelled");
+                    }
+                    _ = ReqwestHttpRequestRunner::stream_body(pending_stream, notifications) => {}
+                }
+                handler.release_http_body_stream(&finished_request_id).await;
             }
-            handler.release_http_body_stream(&finished_request_id).await;
-        });
+            .instrument(stream_span),
+        );
     }
 
     async fn release_http_body_stream(&self, request_id: &str) {

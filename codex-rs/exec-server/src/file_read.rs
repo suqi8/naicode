@@ -6,6 +6,8 @@ use std::sync::Arc;
 use codex_file_system::FILE_READ_CHUNK_SIZE;
 use tokio::sync::Mutex;
 
+use crate::trace_context::set_current_trace_context_as_parent;
+
 const MAX_OPEN_FILE_READS: usize = 128;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -57,13 +59,25 @@ impl FileReadHandleManager {
                 .cloned()
                 .ok_or_else(|| unknown_handle_error(handle_id))?
         };
-        let result =
-            match tokio::task::spawn_blocking(move || read_block_at(&file, offset, len)).await {
-                Ok(result) => result,
-                Err(error) => Err(io::Error::other(format!(
-                    "file read task stopped unexpectedly: {error}"
-                ))),
-            };
+        let read_span = tracing::info_span!(
+            parent: None,
+            "codex.exec_server.fs_read_block",
+            otel.kind = "internal",
+            fs.handle_id = handle_id,
+            fs.offset = offset,
+            fs.length = len,
+        );
+        set_current_trace_context_as_parent(&read_span);
+        let result = match tokio::task::spawn_blocking(move || {
+            read_span.in_scope(|| read_block_at(&file, offset, len))
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(error) => Err(io::Error::other(format!(
+                "file read task stopped unexpectedly: {error}"
+            ))),
+        };
         if result.is_err() {
             self.close(handle_id).await;
         }
