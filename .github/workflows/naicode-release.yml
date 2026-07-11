@@ -42,17 +42,12 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-      - name: Install musl tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools
-      - name: Configure musl linker
+      - name: Install musl tools and configure linker
         run: |
+          sudo apt-get update -q && sudo apt-get install -y -q musl-tools
+          rustup target add x86_64-unknown-linux-musl
           mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml << 'EOF'
-          [target.x86_64-unknown-linux-musl]
-          linker = "musl-gcc"
-          EOF
+          printf '[target.x86_64-unknown-linux-musl]\nlinker = "musl-gcc"\n' >> ~/.cargo/config.toml
       - name: Build
         working-directory: codex-rs
         run: |
@@ -80,17 +75,12 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-unknown-linux-musl
-      - name: Install musl tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q musl-tools gcc-aarch64-linux-gnu
-      - name: Configure musl linker
+      - name: Install musl tools and configure linker
         run: |
+          sudo apt-get update -q && sudo apt-get install -y -q musl-tools
+          rustup target add aarch64-unknown-linux-musl
           mkdir -p ~/.cargo
-          cat >> ~/.cargo/config.toml << 'EOF'
-          [target.aarch64-unknown-linux-musl]
-          linker = "aarch64-linux-gnu-gcc"
-          EOF
+          printf '[target.aarch64-unknown-linux-musl]\nlinker = "musl-gcc"\n' >> ~/.cargo/config.toml
       - name: Build
         working-directory: codex-rs
         run: |
