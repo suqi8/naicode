@@ -489,6 +489,46 @@ pub(crate) enum AppEvent {
         result: Result<String, String>,
     },
 
+    /// naicode: 待应用的 Relay 模型切换选择，包含分组、模型和思考等级。
+    /// 仅在用户确认后由 apply_relay_selection 状态机消费。
+    PendingRelayModelSelection {
+        group: String,
+        model: String,
+        effort: Option<ReasoningEffort>,
+    },
+
+    /// naicode: 开始 Relay 原子模型切换事务：远端换组→写配置→更新 thread→写缓存。
+    ApplyRelaySelection {
+        pending: RelaySelectionPending,
+    },
+
+    /// naicode: Relay 模型切换各阶段内部推进（携带已完成的步骤快照）。
+    RelaySelectionStepDone {
+        step: RelaySelectionStep,
+    },
+
+    /// naicode: Relay 模型切换成功，所有步骤已一致完成。
+    RelaySelectionApplied {
+        group: String,
+        model: String,
+    },
+
+    /// naicode: Relay 模型切换失败且补偿成功（已恢复原状态）。
+    RelaySelectionReverted {
+        reason: String,
+    },
+
+    /// naicode: Relay 模型切换失败且补偿也失败，系统进入不一致状态。
+    RelaySelectionInconsistent {
+        remote_group: String,
+        local_group: Option<String>,
+        thread_model: Option<String>,
+        reason: String,
+    },
+
+    /// naicode: 开始通过 AuthManager 获取授权价格目录（替代匿名 fetch_pricing）。
+    FetchRelayCatalogWithAuth,
+
     /// Result of explicitly fetching remote-backed plugin sections.
     PluginRemoteSectionsLoaded {
         cwd: PathBuf,
@@ -1127,4 +1167,28 @@ pub(crate) enum FeedbackCategory {
     Bug,
     SafetyCheck,
     Other,
+}
+
+/// naicode: 待应用的 Relay 模型选择快照，在整个事务期间保持不变。
+#[derive(Debug, Clone)]
+pub(crate) struct RelaySelectionPending {
+    pub group: String,
+    pub model: String,
+    pub effort: Option<ReasoningEffort>,
+}
+
+/// naicode: Relay 原子切换状态机的执行步骤。
+#[derive(Debug, Clone)]
+pub(crate) enum RelaySelectionStep {
+    /// 远端换组已成功，携带事前快照供恢复使用。
+    RemoteGroupSwitched {
+        snapshot_remote_group: Option<String>,
+        snapshot_local_config_model: String,
+        snapshot_local_config_effort:
+            Option<ReasoningEffort>,
+    },
+    /// 本地 model/effort 已原子写入。
+    LocalConfigWritten,
+    /// Thread settings 已更新并验证。
+    ThreadSettingsUpdated,
 }

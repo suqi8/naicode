@@ -12,10 +12,7 @@ impl ChatWidget {
     /// opens the full picker with every available preset.
     pub(crate) fn open_model_popup(&mut self) {
         if !self.is_session_configured() {
-            self.add_info_message(
-                "Model selection is disabled until startup completes.".to_string(),
-                /*hint*/ None,
-            );
+            self.add_info_message("启动完成前无法选择模型。".to_string(), /*hint*/ None);
             return;
         }
 
@@ -23,7 +20,7 @@ impl ChatWidget {
             Ok(models) => models,
             Err(_) => {
                 self.add_info_message(
-                    "Models are being updated; please try /model again in a moment.".to_string(),
+                    "模型列表正在更新，请稍候再试 /model。".to_string(),
                     /*hint*/ None,
                 );
                 return;
@@ -35,10 +32,26 @@ impl ChatWidget {
     /// naicode: 打开酸奶中转站分组选择器。分组/倍率/价格从公开的
     /// `/api/pricing` 动态拉取（不硬编码），拉到后经 AppEvent 回来渲染。
     pub(crate) fn open_relay_group_popup(&mut self) {
-        self.add_info_message("正在获取酸奶中转站分组与价格…".to_string(), /*hint*/ None);
+        // 用一个「加载中」弹层占位（而非写进滚动历史的 info 消息），
+        // 数据到达后被分组列表替换；用户中途按 Esc 关闭也不会残留。
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            title: Some("酸奶中转站".to_string()),
+            subtitle: Some("正在获取分组与价格…".to_string()),
+            footer_hint: Some(standard_popup_hint_line()),
+            items: Vec::new(),
+            ..Default::default()
+        });
+        self.request_redraw();
         let tx = self.app_event_tx.clone();
+        let codex_home = self.config.codex_home.clone();
         tokio::spawn(async move {
-            let result = codex_login::fetch_pricing().await.map(Box::new);
+            let result = codex_login::fetch_pricing_with_auth(
+                &codex_home,
+                codex_config::types::AuthCredentialsStoreMode::Auto,
+                codex_login::AuthKeyringBackendKind::default(),
+            )
+            .await
+            .map(Box::new);
             tx.send(AppEvent::OpenRelayGroups { result });
         });
     }
@@ -52,13 +65,29 @@ impl ChatWidget {
         let pricing = match result {
             Ok(p) => *p,
             Err(e) => {
-                self.add_info_message(format!("获取分组失败：{e}"), /*hint*/ None);
+                // 用弹层展示错误（替换掉「加载中」弹层，按 Esc 关闭即消失），
+                // 不写进滚动历史。
+                self.bottom_pane.show_selection_view(SelectionViewParams {
+                    title: Some("酸奶中转站分组".to_string()),
+                    subtitle: Some(format!("获取分组失败：{e}")),
+                    footer_hint: Some(standard_popup_hint_line()),
+                    items: Vec::new(),
+                    ..Default::default()
+                });
+                self.request_redraw();
                 return;
             }
         };
         let groups = pricing.groups();
         if groups.is_empty() {
-            self.add_info_message("当前没有可用分组。".to_string(), /*hint*/ None);
+            self.bottom_pane.show_selection_view(SelectionViewParams {
+                title: Some("酸奶中转站分组".to_string()),
+                subtitle: Some("当前没有可用分组。".to_string()),
+                footer_hint: Some(standard_popup_hint_line()),
+                items: Vec::new(),
+                ..Default::default()
+            });
+            self.request_redraw();
             return;
         }
 
@@ -94,7 +123,7 @@ impl ChatWidget {
         self.bottom_pane.show_selection_view(SelectionViewParams {
             title: Some("酸奶中转站分组".to_string()),
             subtitle: Some(
-                "价格 = 模型倍率 × 分组倍率 × 2（¥/1M）；选分组后再选该组内的模型".to_string(),
+                "选分组后展示该分组内的完整价格；选模型后再选思考等级".to_string(),
             ),
             footer_hint: Some(standard_popup_hint_line()),
             items,
@@ -122,12 +151,17 @@ impl ChatWidget {
         let current_model = self.current_model();
         let mut items: Vec<SelectionItem> = Vec::new();
         for m in models {
-            let price = match (
-                pricing.input_price_per_m(m, &group),
-                pricing.output_price_per_m(m, &group),
-            ) {
-                (Some(inp), Some(out)) => {
-                    format!("输入 ¥{inp:.2}/1M · 输出 ¥{out:.2}/1M")
+            let price = match pricing.effective_price(m, &group) {
+                Some(ep) if ep.input.is_some() || ep.output.is_some() => {
+                    let sym = if ep.currency_symbol.is_empty() {
+                        pricing.display.currency_symbol.as_str()
+                    } else {
+                        ep.currency_symbol.as_str()
+                    };
+                    let unit = &pricing.display.token_unit;
+                    let inp = codex_login::format_price_value(ep.input);
+                    let out = codex_login::format_price_value(ep.output);
+                    format!("输入 {sym}{inp}/{unit} · 输出 {sym}{out}/{unit}")
                 }
                 _ => "按次计费".to_string(),
             };
@@ -139,12 +173,8 @@ impl ChatWidget {
                 description: Some(price),
                 is_current: model_name == current_model,
                 actions: vec![Box::new(move |tx| {
-                    // 先隐式换组（改 naicode 令牌的 group），再设默认模型。
-                    tx.send(AppEvent::RelaySwitchGroup {
+                    tx.send(AppEvent::PendingRelayModelSelection {
                         group: group_for_action.clone(),
-                    });
-                    tx.send(AppEvent::UpdateModel(model_for_action.clone()));
-                    tx.send(AppEvent::PersistModelSelection {
                         model: model_for_action.clone(),
                         effort: None,
                     });
@@ -156,7 +186,11 @@ impl ChatWidget {
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
             title: Some(format!("分组「{group}」的可用模型")),
-            subtitle: Some("选中即切到该分组并设为默认模型（¥/1M）".to_string()),
+            subtitle: Some(format!(
+                "选中即切到该分组并设为默认模型（{}/{}）",
+                pricing.display.currency_symbol,
+                pricing.display.token_unit,
+            )),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             ..Default::default()
@@ -179,7 +213,7 @@ impl ChatWidget {
     fn model_menu_warning_line(&self) -> Option<Line<'static>> {
         let base_url = self.custom_openai_base_url()?;
         let warning = format!(
-            "Warning: OpenAI base URL is overridden to {base_url}. Selecting models may not be supported or work properly."
+            "警告：OpenAI base URL 已被覆盖为 {base_url}。选择模型可能不受支持或无法正常工作。"
         );
         Some(Line::from(warning.red()))
     }
@@ -262,12 +296,10 @@ impl ChatWidget {
             })];
 
             let is_current = !items.iter().any(|item| item.is_current);
-            let description = Some(format!(
-                "Choose a specific model and reasoning level (current: {current_label})"
-            ));
+            let description = Some(format!("选择特定的模型和推理级别（当前：{current_label}）"));
 
             items.push(SelectionItem {
-                name: "All models".to_string(),
+                name: "全部模型".to_string(),
                 description,
                 is_current,
                 actions,
@@ -276,10 +308,7 @@ impl ChatWidget {
             });
         }
 
-        let header = self.model_menu_header(
-            "Select Model",
-            "Pick a quick auto mode or browse all models.",
-        );
+        let header = self.model_menu_header("选择模型", "选择快捷自动模式，或浏览全部模型。");
         self.bottom_pane.show_selection_view(SelectionViewParams {
             footer_hint: Some(standard_popup_hint_line()),
             items,
@@ -303,10 +332,7 @@ impl ChatWidget {
 
     pub(crate) fn open_all_models_popup(&mut self, presets: Vec<ModelPreset>) {
         if presets.is_empty() {
-            self.add_info_message(
-                "No additional models are available right now.".to_string(),
-                /*hint*/ None,
-            );
+            self.add_info_message("当前没有其他可用模型。".to_string(), /*hint*/ None);
             return;
         }
 
@@ -336,8 +362,8 @@ impl ChatWidget {
         }
 
         let header = self.model_menu_header(
-            "Select Model and Effort",
-            "Access legacy models by running codex -m <model_name> or in your config.toml",
+            "选择模型和推理级别",
+            "运行 codex -m <model_name> 或在 config.toml 中配置以使用旧版模型",
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             footer_hint: Some(self.bottom_pane.standard_popup_hint_line()),
@@ -405,21 +431,21 @@ impl ChatWidget {
         effort: Option<ReasoningEffortConfig>,
     ) {
         let reasoning_phrase = match effort.as_ref() {
-            Some(ReasoningEffortConfig::None) => "no reasoning".to_string(),
+            Some(ReasoningEffortConfig::None) => "无推理".to_string(),
             Some(selected_effort) => {
                 format!(
-                    "{} reasoning",
+                    "{}推理",
                     Self::reasoning_effort_sentence_label(selected_effort)
                 )
             }
-            None => "the selected reasoning".to_string(),
+            None => "所选推理".to_string(),
         };
-        let plan_only_description = format!("Always use {reasoning_phrase} in Plan mode.");
+        let plan_only_description = format!("在 Plan 模式下始终使用{reasoning_phrase}。");
         let plan_reasoning_source = if let Some(plan_override) =
             self.config.plan_mode_reasoning_effort.as_ref()
         {
             format!(
-                "user-chosen Plan override ({})",
+                "用户设定的 Plan 覆盖值（{}）",
                 Self::reasoning_effort_sentence_label(plan_override)
             )
         } else if let Some(plan_mask) = collaboration_modes::plan_mask(self.model_catalog.as_ref())
@@ -430,18 +456,18 @@ impl ChatWidget {
                 .and_then(|effort| effort.as_ref())
             {
                 Some(plan_effort) => format!(
-                    "built-in Plan default ({})",
+                    "内置 Plan 默认值（{}）",
                     Self::reasoning_effort_sentence_label(plan_effort)
                 ),
-                None => "built-in Plan default (no reasoning)".to_string(),
+                None => "内置 Plan 默认值（无推理）".to_string(),
             }
         } else {
-            "built-in Plan default".to_string()
+            "内置 Plan 默认值".to_string()
         };
         let all_modes_description = format!(
-            "Set the global default reasoning level and the Plan mode override. This replaces the current {plan_reasoning_source}."
+            "设置全局默认推理级别以及 Plan 模式覆盖值。这将替换当前的{plan_reasoning_source}。"
         );
-        let subtitle = format!("Choose where to apply {reasoning_phrase}.");
+        let subtitle = format!("选择在何处应用{reasoning_phrase}。");
         let warning = effort
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
@@ -526,7 +552,7 @@ impl ChatWidget {
         };
         let warning_text = warn_effort.as_ref().map(|effort| {
             let effort_label = Self::reasoning_effort_label(effort);
-            format!("⚠ {effort_label} reasoning effort can quickly consume Plus plan rate limits.")
+            format!("⚠ {effort_label}推理级别可能会快速消耗 Plus 套餐的速率限额。")
         });
         let warn_for_model = preset.model.starts_with("gpt-5.1-codex")
             || preset.model.starts_with("gpt-5.1-codex-max")
@@ -587,7 +613,7 @@ impl ChatWidget {
             let warning = self.ultra_reasoning_concurrency_warning(&effort);
             let mut effort_label = Self::reasoning_effort_label(&effort);
             if Some(choice) == default_choice.as_ref() {
-                effort_label.push_str(" (default)");
+                effort_label.push_str("（默认）");
             }
 
             let description = supported
@@ -647,9 +673,7 @@ impl ChatWidget {
         }
 
         let mut header = ColumnRenderable::new();
-        header.push(Line::from(
-            format!("Select Reasoning Level for {model_slug}").bold(),
-        ));
+        header.push(Line::from(format!("为 {model_slug} 选择推理级别").bold()));
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
             header: Box::new(header),
@@ -662,14 +686,14 @@ impl ChatWidget {
 
     pub(super) fn reasoning_effort_label(effort: &ReasoningEffortConfig) -> String {
         match effort {
-            ReasoningEffortConfig::None => "None".to_string(),
-            ReasoningEffortConfig::Minimal => "Minimal".to_string(),
-            ReasoningEffortConfig::Low => "Low".to_string(),
-            ReasoningEffortConfig::Medium => "Medium".to_string(),
-            ReasoningEffortConfig::High => "High".to_string(),
-            ReasoningEffortConfig::XHigh => "Extra high".to_string(),
-            ReasoningEffortConfig::Max => "Max".to_string(),
-            ReasoningEffortConfig::Ultra => "Ultra".to_string(),
+            ReasoningEffortConfig::None => "无".to_string(),
+            ReasoningEffortConfig::Minimal => "极简".to_string(),
+            ReasoningEffortConfig::Low => "低".to_string(),
+            ReasoningEffortConfig::Medium => "中".to_string(),
+            ReasoningEffortConfig::High => "高".to_string(),
+            ReasoningEffortConfig::XHigh => "超高".to_string(),
+            ReasoningEffortConfig::Max => "最高".to_string(),
+            ReasoningEffortConfig::Ultra => "极限".to_string(),
             ReasoningEffortConfig::Custom(value) => value.clone(),
         }
     }
@@ -699,10 +723,9 @@ impl ChatWidget {
 
         let max_subagents = max_threads.saturating_sub(1);
         Some(format!(
-            "Ultra reasoning may proactively use multiple agents. This session is configured for \
-             {max_threads} concurrent threads with up to {max_subagents} subagents which can \
-             increase usage quickly. Consider setting \
-             features.multi_agent_v2.max_concurrent_threads_per_session below 8."
+            "极限推理可能会主动使用多个智能体。当前会话配置为 {max_threads} 个并发线程，\
+             最多 {max_subagents} 个子智能体，这会使用量快速增长。可考虑将 \
+             features.multi_agent_v2.max_concurrent_threads_per_session 设置为低于 8。"
         ))
     }
 
