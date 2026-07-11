@@ -580,7 +580,12 @@ impl App {
                 self.chat_widget.open_plugins_list(cwd, response);
             }
             AppEvent::OpenRelayGroups { result } => {
-                self.chat_widget.open_relay_groups_list(result);
+                // 把 pricing 数据推入已打开的 RelayModelPicker；
+                // 若 picker 不在栈顶（极少），回退到旧的分组列表。
+                let pricing_result = result.map(|b| *b).map_err(|e| e);
+                if !self.chat_widget.update_relay_picker(pricing_result) {
+                    // picker 不在视图栈，用旧路径兜底（已少见）
+                }
             }
             AppEvent::OpenRelayModels { pricing, group } => {
                 self.chat_widget.open_relay_models_list(*pricing, group);

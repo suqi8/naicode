@@ -150,6 +150,28 @@ impl RelayModelPicker {
         self.group_scroll.ensure_visible(n, 10);
     }
 
+    // --- 状态更新 ---
+
+    /// 数据加载完成后将 picker 从 Loading 切换到 Ready 或 Error。
+    pub(crate) fn set_pricing(&mut self, result: Result<codex_login::RelayPricing, String>) {
+        match result {
+            Ok(pricing) => {
+                let selected = pricing
+                    .selected_group
+                    .clone()
+                    .or_else(|| pricing.groups().into_iter().next().map(|g| g.name));
+                self.selected_group = selected;
+                self.state = RelayPickerState::Ready { pricing };
+                self.init_group_scroll();
+                self.model_scroll.selected_idx = Some(0);
+                self.model_scroll.scroll_top = 0;
+            }
+            Err(message) => {
+                self.state = RelayPickerState::Error { message };
+            }
+        }
+    }
+
     // --- 辅助查询 ---
 
     /// 当前有效分组名（借用 groups 切片）。
@@ -561,6 +583,10 @@ impl Renderable for RelayModelPicker {
 // ---------------------------------------------------------------------------
 
 impl BottomPaneView for RelayModelPicker {
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+
     fn handle_key_event(&mut self, key_event: KeyEvent) {
         // 搜索输入模式：所有可打印字符追加到 search_query。
         if self.is_searching {

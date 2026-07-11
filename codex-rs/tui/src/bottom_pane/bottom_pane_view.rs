@@ -149,4 +149,10 @@ pub(crate) trait BottomPaneView: Renderable {
     fn next_frame_delay(&self) -> Option<std::time::Duration> {
         None
     }
+
+    /// Allow downcasting to a concrete type. Override in views that need
+    /// external state updates (e.g. RelayModelPicker receiving pricing data).
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        None
+    }
 }

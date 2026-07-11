@@ -1063,6 +1063,33 @@ impl BottomPane {
         self.request_redraw();
     }
 
+    /// Show the relay model picker in Loading state.
+    pub(crate) fn show_relay_picker(&mut self, app_event_tx: AppEventSender) {
+        let picker = relay_model_picker::RelayModelPicker::new(
+            relay_model_picker::RelayPickerState::Loading,
+            app_event_tx,
+        );
+        self.push_view(Box::new(picker));
+    }
+
+    /// Update the relay model picker at the top of the view stack with loaded pricing data.
+    /// If the top view is not a RelayModelPicker, this is a no-op.
+    pub(crate) fn update_relay_picker(
+        &mut self,
+        result: Result<codex_login::RelayPricing, String>,
+    ) {
+        if let Some(view) = self.view_stack.last_mut() {
+            if let Some(picker) = view
+                .as_any_mut()
+                .and_then(|v| v.downcast_mut::<relay_model_picker::RelayModelPicker>())
+            {
+                picker.set_pricing(result);
+                self.schedule_active_view_frame();
+                self.request_redraw();
+            }
+        }
+    }
+
     /// Show a generic list selection view with the provided items.
     pub(crate) fn show_selection_view(
         &mut self,

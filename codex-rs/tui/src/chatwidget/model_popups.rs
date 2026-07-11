@@ -29,20 +29,22 @@ impl ChatWidget {
         self.open_model_popup_with_presets(presets);
     }
 
-    /// naicode: 打开酸奶中转站分组选择器。分组/倍率/价格从公开的
-    /// `/api/pricing` 动态拉取（不硬编码），拉到后经 AppEvent 回来渲染。
+    /// Push pricing data into the RelayModelPicker currently on the view stack.
+    /// Returns true (no-op fallback removed; picker is always opened first).
+    pub(crate) fn update_relay_picker(
+        &mut self,
+        result: Result<codex_login::RelayPricing, String>,
+    ) -> bool {
+        self.bottom_pane.update_relay_picker(result);
+        true
+    }
+
+    /// naicode: 打开酸奶中转站模型选择器。显示新的专用 picker（Loading 状态），
+    /// 然后触发授权 catalog 拉取；数据到达后 picker 自动切换到 Ready 状态。
     pub(crate) fn open_relay_group_popup(&mut self) {
-        // 用一个「加载中」弹层占位（而非写进滚动历史的 info 消息），
-        // 数据到达后被分组列表替换；用户中途按 Esc 关闭也不会残留。
-        self.bottom_pane.show_selection_view(SelectionViewParams {
-            title: Some("酸奶中转站".to_string()),
-            subtitle: Some("正在获取分组与价格…".to_string()),
-            footer_hint: Some(standard_popup_hint_line()),
-            items: Vec::new(),
-            ..Default::default()
-        });
-        self.request_redraw();
         let tx = self.app_event_tx.clone();
+        self.bottom_pane.show_relay_picker(tx.clone());
+        self.request_redraw();
         let codex_home = self.config.codex_home.clone();
         tokio::spawn(async move {
             let result = codex_login::fetch_pricing_with_auth(
@@ -51,8 +53,10 @@ impl ChatWidget {
                 codex_login::AuthKeyringBackendKind::default(),
             )
             .await
-            .map(Box::new);
-            tx.send(AppEvent::OpenRelayGroups { result });
+            .map(|p| *Box::new(p));
+            tx.send(AppEvent::OpenRelayGroups {
+                result: result.map(Box::new),
+            });
         });
     }
 
