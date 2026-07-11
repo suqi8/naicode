@@ -26,6 +26,7 @@ async fn file_storage_load_returns_auth_dot_json() -> anyhow::Result<()> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     storage
@@ -49,6 +50,7 @@ async fn file_storage_save_persists_auth_dot_json() -> anyhow::Result<()> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     let file = get_auth_file(codex_home.path());
@@ -60,6 +62,45 @@ async fn file_storage_save_persists_auth_dot_json() -> anyhow::Result<()> {
         .try_read_auth_json(&file)
         .context("failed to read auth file after save")?;
     assert_eq!(auth_dot_json, same_auth_dot_json);
+    Ok(())
+}
+
+#[tokio::test]
+async fn file_storage_round_trips_relay_oauth_tokens_atomically() -> anyhow::Result<()> {
+    let codex_home = tempdir()?;
+    let storage = FileAuthStorage::new(codex_home.path().to_path_buf());
+    let auth = AuthDotJson {
+        auth_mode: Some(AuthMode::RelayOAuthTokens),
+        openai_api_key: None,
+        tokens: None,
+        last_refresh: None,
+        agent_identity: None,
+        personal_access_token: None,
+        bedrock_api_key: None,
+        relay_oauth: Some(RelayOAuthTokens {
+            access_token: "nai_at_test".to_string(),
+            refresh_token: "nai_rt_test".to_string(),
+            expires_at: 1_800_000_000,
+            session_id: "session-id".to_string(),
+            account_id: Some("42".to_string()),
+            account_name: Some("测试账号".to_string()),
+            device_name: Some("测试设备".to_string()),
+        }),
+    };
+
+    storage.save(&auth)?;
+    assert_eq!(storage.load()?, Some(auth));
+    // 成功 rename 后不得遗留临时文件。
+    let tmp_count = std::fs::read_dir(codex_home.path())?
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".auth.json.tmp-")
+        })
+        .count();
+    assert_eq!(tmp_count, 0);
     Ok(())
 }
 
@@ -84,6 +125,7 @@ async fn file_storage_round_trips_agent_identity_auth() -> anyhow::Result<()> {
         agent_identity: Some(AgentIdentityStorage::Jwt(agent_identity)),
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     storage.save(&auth_dot_json)?;
@@ -115,6 +157,7 @@ async fn file_storage_round_trips_registered_agent_identity_auth() -> anyhow::Re
         agent_identity: Some(AgentIdentityStorage::Record(record)),
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     storage.save(&auth_dot_json)?;
@@ -166,6 +209,7 @@ async fn file_storage_loads_empty_agent_identity_email_as_none() -> anyhow::Resu
             })),
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         })
     );
     Ok(())
@@ -192,6 +236,7 @@ async fn file_storage_writes_missing_agent_identity_email_as_empty_string() -> a
         })),
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     storage.save(&auth_dot_json)?;
@@ -215,6 +260,7 @@ async fn file_storage_round_trips_personal_access_token_auth() -> anyhow::Result
         agent_identity: None,
         personal_access_token: Some("at-example".to_string()),
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     storage.save(&auth_dot_json)?;
@@ -266,6 +312,7 @@ fn file_storage_delete_removes_auth_file() -> anyhow::Result<()> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
     let storage = create_auth_storage(
         dir.path().to_path_buf(),
@@ -297,6 +344,7 @@ fn ephemeral_storage_save_load_delete_is_in_memory_only() -> anyhow::Result<()> 
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     storage.save(&auth_dot_json)?;
@@ -430,6 +478,7 @@ fn auth_with_prefix(prefix: &str) -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     }
 }
 
@@ -457,6 +506,7 @@ fn secrets_keyring_auth_storage_load_returns_deserialized_auth() -> anyhow::Resu
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
     seed_secrets_backend_with_auth(&mock_keyring, codex_home.path(), &expected)?;
 
@@ -595,6 +645,7 @@ fn secrets_keyring_auth_storage_save_persists_and_removes_fallback_file() -> any
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
 
     storage.save(&auth)?;

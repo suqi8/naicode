@@ -169,6 +169,7 @@ async fn stored_agent_identity_jwt_keeps_auth_json_unchanged() -> anyhow::Result
             agent_identity: Some(AgentIdentityStorage::Jwt(agent_identity.clone())),
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         },
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::Direct,
@@ -247,6 +248,7 @@ async fn login_with_access_token_writes_only_personal_access_token() {
             agent_identity: None,
             personal_access_token: Some("at-login-test".to_string()),
             bedrock_api_key: None,
+            relay_oauth: None,
         }
     );
     assert_eq!(auth.resolved_mode(), AuthMode::PersonalAccessToken);
@@ -857,6 +859,7 @@ async fn pro_account_with_no_api_key_uses_chatgpt_auth() {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         },
         auth_dot_json
     );
@@ -904,6 +907,7 @@ fn logout_removes_auth_file() -> Result<(), std::io::Error> {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
     super::save_auth(
         dir.path(),
@@ -1013,6 +1017,268 @@ async fn refresh_failure_is_scoped_to_the_matching_auth_snapshot() {
 
     assert_eq!(manager.refresh_failure_for_auth(&auth), Some(error));
     assert_eq!(manager.refresh_failure_for_auth(&updated_auth), None);
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn relay_request_401_reloads_changed_snapshot_without_refresh() -> anyhow::Result<()> {
+    let codex_home = tempdir()?;
+    let server = MockServer::start().await;
+    let initial = relay_auth("old-access", "old-refresh", "relay-session", 1_900_000_000);
+    save_auth(
+        codex_home.path(),
+        &initial,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let manager = AuthManager::shared(
+        codex_home.path().to_path_buf(),
+        false,
+        AuthCredentialsStoreMode::File,
+        None,
+        None,
+        AuthKeyringBackendKind::Direct,
+        None,
+    )
+    .await;
+
+    let changed = relay_auth(
+        "disk-access",
+        "disk-refresh",
+        "relay-session",
+        1_900_000_100,
+    );
+    let home = codex_home.path().to_path_buf();
+    Mock::given(method("GET"))
+        .and(path("/resource"))
+        .and(header("authorization", "Bearer old-access"))
+        .respond_with(move |_request: &wiremock::Request| {
+            save_auth(
+                &home,
+                &changed,
+                AuthCredentialsStoreMode::File,
+                AuthKeyringBackendKind::Direct,
+            )
+            .expect("rotate stored relay auth");
+            ResponseTemplate::new(401)
+        })
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/resource"))
+        .and(header("authorization", "Bearer disk-access"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let url = format!("{}/resource", server.uri());
+    let client = reqwest::Client::new();
+    let response = manager
+        .execute_relay_request(|token| client.get(&url).bearer_auth(token))
+        .await?;
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(manager.auth_cached().unwrap().get_token()?, "disk-access");
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn relay_request_401_refreshes_unchanged_snapshot_once() -> anyhow::Result<()> {
+    let codex_home = tempdir()?;
+    let server = MockServer::start().await;
+    let initial = relay_auth("old-access", "old-refresh", "relay-session", 1_900_000_000);
+    save_auth(
+        codex_home.path(),
+        &initial,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let _refresh_guard = EnvVarGuard::set(
+        RELAY_REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR,
+        &format!("{}/oauth/token", server.uri()),
+    );
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "new-access",
+            "refresh_token": "new-refresh",
+            "expires_in": 900,
+            "session_id": "relay-session"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/resource"))
+        .and(header("authorization", "Bearer old-access"))
+        .respond_with(ResponseTemplate::new(401))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/resource"))
+        .and(header("authorization", "Bearer new-access"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let manager = AuthManager::shared(
+        codex_home.path().to_path_buf(),
+        false,
+        AuthCredentialsStoreMode::File,
+        None,
+        None,
+        AuthKeyringBackendKind::Direct,
+        None,
+    )
+    .await;
+    let url = format!("{}/resource", server.uri());
+    let client = reqwest::Client::new();
+    let response = manager
+        .execute_relay_request(|token| client.get(&url).bearer_auth(token))
+        .await?;
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(manager.auth_cached().unwrap().get_token()?, "new-access");
+    server.verify().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn relay_auth_snapshot_equality_tracks_all_rotation_fields() -> anyhow::Result<()> {
+    let home = tempdir()?;
+    let base_json = relay_auth("access", "refresh", "session", 100);
+    let base = CodexAuth::from_auth_dot_json(
+        home.path(),
+        base_json.clone(),
+        AuthCredentialsStoreMode::File,
+        None,
+        AuthKeyringBackendKind::Direct,
+        None,
+        None,
+    )
+    .await?;
+    for changed in [
+        relay_auth("other", "refresh", "session", 100),
+        relay_auth("access", "other", "session", 100),
+        relay_auth("access", "refresh", "other", 100),
+        relay_auth("access", "refresh", "session", 101),
+    ] {
+        let changed = CodexAuth::from_auth_dot_json(
+            home.path(),
+            changed,
+            AuthCredentialsStoreMode::File,
+            None,
+            AuthKeyringBackendKind::Direct,
+            None,
+            None,
+        )
+        .await?;
+        assert!(!AuthManager::auths_equal_for_refresh(
+            Some(&base),
+            Some(&changed)
+        ));
+    }
+
+    let mut metadata_only = base_json;
+    let tokens = metadata_only.relay_oauth.as_mut().unwrap();
+    tokens.account_id = Some("other-account".to_string());
+    tokens.account_name = Some("renamed".to_string());
+    tokens.device_name = Some("other-device".to_string());
+    let metadata_only = CodexAuth::from_auth_dot_json(
+        home.path(),
+        metadata_only,
+        AuthCredentialsStoreMode::File,
+        None,
+        AuthKeyringBackendKind::Direct,
+        None,
+        None,
+    )
+    .await?;
+    assert!(AuthManager::auths_equal_for_refresh(
+        Some(&base),
+        Some(&metadata_only)
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn relay_request_refreshes_proactively_before_sending() -> anyhow::Result<()> {
+    let codex_home = tempdir()?;
+    let server = MockServer::start().await;
+    save_auth(
+        codex_home.path(),
+        &relay_auth("expired-access", "old-refresh", "relay-session", 1),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let _refresh_guard = EnvVarGuard::set(
+        RELAY_REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR,
+        &format!("{}/oauth/token", server.uri()),
+    );
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "fresh-access",
+            "refresh_token": "fresh-refresh",
+            "expires_in": 900,
+            "session_id": "relay-session"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/resource"))
+        .and(header("authorization", "Bearer fresh-access"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let manager = AuthManager::shared(
+        codex_home.path().to_path_buf(),
+        false,
+        AuthCredentialsStoreMode::File,
+        None,
+        None,
+        AuthKeyringBackendKind::Direct,
+        None,
+    )
+    .await;
+
+    let url = format!("{}/resource", server.uri());
+    let client = reqwest::Client::new();
+    let response = manager
+        .execute_relay_request(|token| client.get(&url).bearer_auth(token))
+        .await?;
+
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(manager.auth_cached().unwrap().get_token()?, "fresh-access");
+    server.verify().await;
+    Ok(())
+}
+
+fn relay_auth(access: &str, refresh: &str, session: &str, expires_at: i64) -> AuthDotJson {
+    AuthDotJson {
+        auth_mode: Some(AuthMode::RelayOAuthTokens),
+        openai_api_key: None,
+        tokens: None,
+        last_refresh: None,
+        agent_identity: None,
+        personal_access_token: None,
+        bedrock_api_key: None,
+        relay_oauth: Some(RelayOAuthTokens {
+            access_token: access.to_string(),
+            refresh_token: refresh.to_string(),
+            expires_at,
+            session_id: session.to_string(),
+            account_id: Some("account".to_string()),
+            account_name: None,
+            device_name: None,
+        }),
+    }
 }
 
 #[tokio::test]
@@ -1871,6 +2137,7 @@ async fn enforce_login_restrictions_logs_out_for_agent_identity_workspace_mismat
             agent_identity: Some(AgentIdentityStorage::Jwt(agent_identity)),
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         },
         AuthCredentialsStoreMode::File,
         AuthKeyringBackendKind::default(),

@@ -1,22 +1,72 @@
-//! 酸奶中转站定价数据（公开端点，无需登录）。
+//! 酸奶中转站模型与价格目录。
 //!
-//! `/api/pricing` 是公开的：匿名 GET 即可拿到全部模型的倍率、每个分组的
-//! 倍率(`group_ratio`)、以及分组说明(`usable_group`)。naicode 的 TUI
-//! 「模型 + 分组 + 价格」三合一选择器据此渲染，不必带 session/sk。
-//!
-//! 价格换算（人民币，不做美元汇率换算）：
-//!   每百万 token 单价 ¥/1M = model_ratio × group_ratio × 2
-//! （2 = new-api 约定的 $/1M 基准系数；本站 1 额度 = 1 元，故直接当人民币）。
+//! Relay OAuth 模式只调用授权 catalog，并复用 [`AuthManager`] 的 reload/refresh/401
+//! 重试语义；不会回退匿名价格。旧 API key/session 用户仍可使用公开 `/api/pricing`。
 
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use crate::auth::AuthKeyringBackendKind;
+use crate::auth::AuthManager;
+use crate::auth::RelayRequestError;
 use crate::relay::api::RELAY_BASE_URL;
+use codex_config::types::AuthCredentialsStoreMode;
+use codex_protocol::auth::AuthMode;
 
 const USER_AGENT: &str = "naicode-cli";
 
-/// 单个模型的定价条目（取 /api/pricing data[] 需要的字段）。
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct PricingDisplay {
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub currency_code: Option<String>,
+    #[serde(default)]
+    pub currency_symbol: String,
+    #[serde(default)]
+    pub token_unit: String,
+    #[serde(default)]
+    pub quota_display_type: String,
+    #[serde(default)]
+    pub pricing_mode: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct EffectivePrice {
+    #[serde(default)]
+    pub group_ratio: Option<f64>,
+    #[serde(default)]
+    pub basis: String,
+    #[serde(default)]
+    pub currency_code: Option<String>,
+    #[serde(default)]
+    pub currency_symbol: String,
+    #[serde(default)]
+    pub input: Option<f64>,
+    #[serde(default)]
+    pub output: Option<f64>,
+    #[serde(default)]
+    pub cache_read: Option<f64>,
+    #[serde(default)]
+    pub cache_create_5m: Option<f64>,
+    #[serde(default)]
+    pub cache_create_1h: Option<f64>,
+    #[serde(default)]
+    pub image_input: Option<f64>,
+    #[serde(default)]
+    pub audio_input: Option<f64>,
+    #[serde(default)]
+    pub audio_output: Option<f64>,
+    #[serde(default)]
+    pub request: Option<f64>,
+    #[serde(default)]
+    pub preview: Option<serde_json::Value>,
+}
+
+/// 单个模型的目录条目。原始倍率字段仅为旧页面/诊断兼容；客户端展示只读取
+/// `effective_prices`，不再自行计算倍率、货币或计价单位。
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 pub struct PricingModel {
     #[serde(default)]
     pub model_name: String,
@@ -24,180 +74,287 @@ pub struct PricingModel {
     pub model_ratio: f64,
     #[serde(default)]
     pub completion_ratio: f64,
-    /// 该模型可用的分组名列表。
     #[serde(default)]
     pub enable_groups: Vec<String>,
-    /// 0=按量计费，1=按次计费（按次时用 model_price 而非 ratio）。
     #[serde(default)]
     pub quota_type: i64,
     #[serde(default)]
     pub model_price: f64,
+    #[serde(default)]
+    pub billing_mode: String,
+    #[serde(default)]
+    pub billing_expr: Option<String>,
+    #[serde(default)]
+    pub pricing_version: String,
+    #[serde(default)]
+    pub effective_prices: HashMap<String, EffectivePrice>,
 }
 
-/// 一个分组的展示信息。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GroupInfo {
     pub name: String,
-    /// 分组说明（usable_group 的值，可能为空）。
     pub desc: String,
-    /// 分组倍率（group_ratio）。
     pub ratio: f64,
 }
 
-/// /api/pricing 的完整解析结果。
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct RelayPricing {
     pub models: Vec<PricingModel>,
-    /// 分组名 → 倍率。
     pub group_ratio: HashMap<String, f64>,
-    /// 分组名 → 说明。
     pub usable_group: HashMap<String, String>,
+    pub selected_group: Option<String>,
+    pub display: PricingDisplay,
+    pub version: Option<String>,
 }
 
 impl RelayPricing {
-    /// 列出所有可用分组（按倍率升序，便宜的在前）。
     pub fn groups(&self) -> Vec<GroupInfo> {
-        let mut list: Vec<GroupInfo> = self
-            .group_ratio
-            .iter()
-            .map(|(name, ratio)| GroupInfo {
-                name: name.clone(),
-                desc: self.usable_group.get(name).cloned().unwrap_or_default(),
-                ratio: *ratio,
+        let mut names: Vec<String> = self.group_ratio.keys().cloned().collect();
+        for model in &self.models {
+            for group in model.effective_prices.keys() {
+                if !names.contains(group) {
+                    names.push(group.clone());
+                }
+            }
+        }
+        names.sort_by(|a, b| {
+            let a_ratio = self.group_ratio.get(a).copied().unwrap_or(f64::INFINITY);
+            let b_ratio = self.group_ratio.get(b).copied().unwrap_or(f64::INFINITY);
+            a_ratio
+                .partial_cmp(&b_ratio)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.cmp(b))
+        });
+        names
+            .into_iter()
+            .map(|name| GroupInfo {
+                ratio: self.group_ratio.get(&name).copied().unwrap_or_default(),
+                desc: self.usable_group.get(&name).cloned().unwrap_or_default(),
+                name,
             })
-            .collect();
-        list.sort_by(|a, b| a.ratio.partial_cmp(&b.ratio).unwrap_or(std::cmp::Ordering::Equal));
-        list
-    }
-
-    /// 某分组下可用的模型（enable_groups 含该分组）。
-    pub fn models_in_group(&self, group: &str) -> Vec<&PricingModel> {
-        self.models
-            .iter()
-            .filter(|m| m.enable_groups.iter().any(|g| g == group))
             .collect()
     }
 
-    /// 计算某模型在某分组下的输入价格 ¥/1M。None 表示按次计费或数据缺失。
-    pub fn input_price_per_m(&self, model: &PricingModel, group: &str) -> Option<f64> {
-        if model.quota_type == 1 {
-            return None; // 按次计费，不按 token
-        }
-        let gr = self.group_ratio.get(group).copied()?;
-        Some(model.model_ratio * gr * 2.0)
+    pub fn models_in_group(&self, group: &str) -> Vec<&PricingModel> {
+        self.models
+            .iter()
+            .filter(|model| {
+                model.effective_prices.contains_key(group)
+                    || model.enable_groups.iter().any(|enabled| enabled == group)
+            })
+            .collect()
     }
 
-    /// 输出价格 ¥/1M（= 输入价 × completion_ratio）。
-    pub fn output_price_per_m(&self, model: &PricingModel, group: &str) -> Option<f64> {
-        let input = self.input_price_per_m(model, group)?;
-        let cr = if model.completion_ratio > 0.0 {
-            model.completion_ratio
-        } else {
-            1.0
-        };
-        Some(input * cr)
+    pub fn effective_price<'a>(
+        &'a self,
+        model: &'a PricingModel,
+        group: &str,
+    ) -> Option<&'a EffectivePrice> {
+        model.effective_prices.get(group)
     }
 }
 
-/// 匿名拉取并解析 /api/pricing（异步）。
+#[derive(Debug, thiserror::Error)]
+pub enum RelayCatalogError {
+    #[error(transparent)]
+    Auth(#[from] RelayRequestError),
+    #[error("获取分组与价格失败（HTTP {0}）")]
+    Http(reqwest::StatusCode),
+    #[error("分组与价格响应无效: {0}")]
+    InvalidResponse(String),
+}
+
+impl RelayCatalogError {
+    pub fn category(&self) -> &'static str {
+        match self {
+            Self::Auth(error) => error.category(),
+            Self::Http(_) => "catalog_http",
+            Self::InvalidResponse(_) => "catalog_invalid_response",
+        }
+    }
+}
+
+pub async fn fetch_pricing_with_manager(
+    auth_manager: Arc<AuthManager>,
+) -> Result<RelayPricing, RelayCatalogError> {
+    if auth_manager.get_api_auth_mode() != Some(AuthMode::RelayOAuthTokens) {
+        return Err(RelayRequestError::NotLoggedIn.into());
+    }
+    let client = reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .build()
+        .map_err(|error| RelayRequestError::Network(error.to_string()))?;
+    let url = format!("{RELAY_BASE_URL}/api/cli/oauth/catalog");
+    let response = auth_manager
+        .execute_relay_request(|token| client.get(&url).bearer_auth(token))
+        .await?;
+    if !response.status().is_success() {
+        return Err(RelayCatalogError::Http(response.status()));
+    }
+    let body = response
+        .json()
+        .await
+        .map_err(|error| RelayCatalogError::InvalidResponse(error.to_string()))?;
+    parse_pricing_body(body).map_err(RelayCatalogError::InvalidResponse)
+}
+
+/// 兼容现有调用方的授权 catalog 入口。实际凭据读取由 AuthManager 完成，因此同时
+/// 支持 file/keyring/auto；Relay OAuth 模式绝不匿名降级。
+pub async fn fetch_pricing_with_auth(
+    codex_home: &std::path::Path,
+    store_mode: AuthCredentialsStoreMode,
+    keyring: AuthKeyringBackendKind,
+) -> Result<RelayPricing, String> {
+    let manager = AuthManager::shared(
+        codex_home.to_path_buf(),
+        false,
+        store_mode,
+        None,
+        None,
+        keyring,
+        None,
+    )
+    .await;
+    fetch_pricing_with_manager(manager)
+        .await
+        .map_err(|error| format!("[{}] {error}", error.category()))
+}
+
+/// 公开 pricing 只保留给明确的旧 API-key/session 兼容流程。
 pub async fn fetch_pricing() -> Result<RelayPricing, String> {
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
         .build()
-        .map_err(|e| e.to_string())?;
-    let resp = client
+        .map_err(|error| error.to_string())?;
+    let response = client
         .get(format!("{RELAY_BASE_URL}/api/pricing"))
         .send()
         .await
-        .map_err(|e| e.to_string())?;
-    let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        .map_err(|error| error.to_string())?;
+    let body = response.json().await.map_err(|error| error.to_string())?;
+    parse_pricing_body(body)
+}
 
-    let models: Vec<PricingModel> = body
-        .get("data")
-        .and_then(|d| serde_json::from_value(d.clone()).ok())
-        .unwrap_or_default();
-    let group_ratio: HashMap<String, f64> = body
-        .get("group_ratio")
-        .and_then(|g| serde_json::from_value(g.clone()).ok())
-        .unwrap_or_default();
-    let usable_group: HashMap<String, String> = body
-        .get("usable_group")
-        .and_then(|u| serde_json::from_value(u.clone()).ok())
-        .unwrap_or_default();
-
+fn parse_pricing_body(body: serde_json::Value) -> Result<RelayPricing, String> {
+    let models = serde_json::from_value(body.get("data").cloned().unwrap_or_default())
+        .map_err(|error| error.to_string())?;
+    let group_ratio = serde_json::from_value(
+        body.get("group_ratio")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+    )
+    .map_err(|error| error.to_string())?;
+    let usable_group = serde_json::from_value(
+        body.get("usable_group")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+    )
+    .map_err(|error| error.to_string())?;
+    let display = serde_json::from_value(
+        body.get("display")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})),
+    )
+    .map_err(|error| error.to_string())?;
     Ok(RelayPricing {
         models,
         group_ratio,
         usable_group,
+        selected_group: body
+            .get("selected_group")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        display,
+        version: body
+            .get("pricing_version")
+            .or_else(|| body.get("version"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
     })
+}
+
+/// 按服务端返回的数值做纯显示格式化：不改变币种、不应用倍率。
+pub fn format_price_value(value: Option<f64>) -> String {
+    let Some(value) = value.filter(|value| value.is_finite() && *value >= 0.0) else {
+        return "—".to_string();
+    };
+    let precision = if value.abs() >= 1.0 { 4 } else { 6 };
+    let formatted = format!("{value:.precision$}");
+    formatted
+        .trim_end_matches('0')
+        .trim_end_matches('.')
+        .to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sample() -> RelayPricing {
-        RelayPricing {
-            models: vec![
-                PricingModel {
-                    model_name: "claude-sonnet-4".to_string(),
-                    model_ratio: 1.5,
-                    completion_ratio: 5.0,
-                    enable_groups: vec!["claude5".to_string(), "claude1".to_string()],
-                    quota_type: 0,
-                    model_price: 0.0,
-                },
-                PricingModel {
-                    model_name: "seedance".to_string(),
-                    model_ratio: 0.0,
-                    completion_ratio: 0.0,
-                    enable_groups: vec!["seedance".to_string()],
-                    quota_type: 1,
-                    model_price: 1.8,
-                },
-            ],
-            group_ratio: HashMap::from([
-                ("claude5".to_string(), 0.12),
-                ("claude1".to_string(), 0.23),
-            ]),
-            usable_group: HashMap::from([("claude5".to_string(), "五折分组".to_string())]),
-        }
+    #[test]
+    fn parses_structured_catalog_and_all_price_channels() {
+        let catalog = parse_pricing_body(serde_json::json!({
+            "pricing_version": "catalog-v2",
+            "selected_group": "vip",
+            "display": {
+                "kind": "currency", "currency_code": "CNY", "currency_symbol": "¥",
+                "token_unit": "1M tokens", "quota_display_type": "CNY", "pricing_mode": "billing"
+            },
+            "group_ratio": {"vip": 0.5},
+            "usable_group": {"vip": "会员"},
+            "data": [{
+                "model_name": "gpt-test", "enable_groups": ["vip"],
+                "billing_mode": "ratio", "pricing_version": "model-v3",
+                "effective_prices": {"vip": {
+                    "group_ratio": 0.5, "basis": "per_million_tokens",
+                    "currency_code": "CNY", "currency_symbol": "¥",
+                    "input": 0.2, "output": 1.6, "cache_read": 0.02,
+                    "cache_create_5m": 0.25, "cache_create_1h": 0.4,
+                    "image_input": 0.03, "audio_input": 0.04,
+                    "audio_output": 0.08, "request": null
+                }}
+            }]
+        }))
+        .expect("catalog");
+        assert_eq!(catalog.selected_group.as_deref(), Some("vip"));
+        assert_eq!(catalog.version.as_deref(), Some("catalog-v2"));
+        assert_eq!(catalog.display.currency_symbol, "¥");
+        let price = catalog.effective_price(&catalog.models[0], "vip").unwrap();
+        assert_eq!(price.cache_create_1h, Some(0.4));
+        assert_eq!(price.audio_output, Some(0.08));
+        assert_eq!(price.request, None);
     }
 
     #[test]
-    fn groups_sorted_by_ratio_ascending() {
-        let p = sample();
-        let groups = p.groups();
-        assert_eq!(groups[0].name, "claude5");
-        assert_eq!(groups[0].desc, "五折分组");
-        assert_eq!(groups[1].name, "claude1");
+    fn formatting_is_currency_agnostic_and_never_scientific() {
+        assert_eq!(format_price_value(Some(12.34000)), "12.34");
+        assert_eq!(format_price_value(Some(0.0001234)), "0.000123");
+        assert_eq!(format_price_value(Some(0.0)), "0");
+        assert_eq!(format_price_value(None), "—");
+        assert_eq!(format_price_value(Some(f64::NAN)), "—");
     }
 
     #[test]
-    fn models_in_group_filters_by_enable_groups() {
-        let p = sample();
-        let in_claude5 = p.models_in_group("claude5");
-        assert_eq!(in_claude5.len(), 1);
-        assert_eq!(in_claude5[0].model_name, "claude-sonnet-4");
-        assert!(p.models_in_group("seedance").len() == 1);
+    fn legacy_version_field_still_parses() {
+        let catalog = parse_pricing_body(serde_json::json!({
+            "version": "legacy-v1",
+            "data": []
+        }))
+        .expect("catalog");
+        assert_eq!(catalog.version.as_deref(), Some("legacy-v1"));
     }
 
     #[test]
-    fn price_uses_model_ratio_times_group_ratio_times_two() {
-        let p = sample();
-        let m = &p.models[0];
-        // 1.5 × 0.12 × 2 = 0.36
-        let input = p.input_price_per_m(m, "claude5").expect("priced");
-        assert!((input - 0.36).abs() < 1e-9);
-        // 输出 = 输入 × completion_ratio(5) = 1.8
-        let output = p.output_price_per_m(m, "claude5").expect("priced");
-        assert!((output - 1.8).abs() < 1e-9);
-    }
-
-    #[test]
-    fn per_call_models_have_no_token_price() {
-        let p = sample();
-        let seedance = &p.models[1];
-        assert!(p.input_price_per_m(seedance, "seedance").is_none());
+    fn groups_can_come_from_effective_prices() {
+        let pricing = RelayPricing {
+            models: vec![PricingModel {
+                effective_prices: HashMap::from([(
+                    "oauth-only".to_string(),
+                    EffectivePrice::default(),
+                )]),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(pricing.groups()[0].name, "oauth-only");
     }
 }

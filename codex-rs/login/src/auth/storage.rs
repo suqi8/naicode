@@ -58,6 +58,27 @@ pub struct AuthDotJson {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bedrock_api_key: Option<BedrockApiKeyAuth>,
+
+    /// 酸奶中转站 OAuth 凭据（RelayOAuthTokens 模式）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_oauth: Option<RelayOAuthTokens>,
+}
+
+/// 酸奶中转站 OAuth 令牌集：短期 access token + 可轮换 refresh token。
+/// 明文仅存于本地凭据存储（文件原子写入或系统凭据库），不下发长期 sk-。
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+pub struct RelayOAuthTokens {
+    pub access_token: String,
+    pub refresh_token: String,
+    /// access token 到期的 Unix 秒。
+    pub expires_at: i64,
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_name: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
@@ -206,15 +227,36 @@ impl AuthStorageBackend for FileAuthStorage {
             std::fs::create_dir_all(parent)?;
         }
         let json_data = serde_json::to_string_pretty(auth_dot_json)?;
+
+        // 原子写入：同目录临时文件 → 写入并 fsync → rename 覆盖。
+        // 避免 refresh 轮换时因崩溃留下半套凭据（见设计 §9.1）。
+        let parent = auth_file
+            .parent()
+            .ok_or_else(|| std::io::Error::other("auth.json 无父目录"))?;
+        let tmp_file = parent.join(format!(".auth.json.tmp-{}", std::process::id()));
+
         let mut options = OpenOptions::new();
         options.truncate(true).write(true).create(true);
         #[cfg(unix)]
         {
             options.mode(0o600);
         }
-        let mut file = options.open(auth_file)?;
-        file.write_all(json_data.as_bytes())?;
-        file.flush()?;
+        let write_result = (|| -> std::io::Result<()> {
+            let mut file = options.open(&tmp_file)?;
+            file.write_all(json_data.as_bytes())?;
+            file.flush()?;
+            file.sync_all()?; // 落盘后再 rename，保证覆盖前数据完整
+            Ok(())
+        })();
+        if let Err(err) = write_result {
+            let _ = std::fs::remove_file(&tmp_file);
+            return Err(err);
+        }
+        // rename 在同一目录内原子替换旧文件。
+        if let Err(err) = std::fs::rename(&tmp_file, &auth_file) {
+            let _ = std::fs::remove_file(&tmp_file);
+            return Err(err);
+        }
         Ok(())
     }
 

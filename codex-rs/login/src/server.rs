@@ -890,6 +890,7 @@ pub(crate) async fn persist_tokens_async(
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         };
         save_auth(
             &codex_home,

@@ -20,6 +20,7 @@ fn api_key_auth() -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     }
 }
 
@@ -32,6 +33,7 @@ fn bedrock_only_auth() -> AuthDotJson {
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: Some(bedrock_auth()),
+        relay_oauth: None,
     }
 }
 
@@ -76,6 +78,7 @@ async fn login_with_bedrock_api_key_replaces_openai_auth() -> anyhow::Result<()>
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: Some(bedrock_auth()),
+        relay_oauth: None,
     };
     assert_eq!(loaded, expected);
     assert_eq!(auth_manager.auth_mode(), Some(AuthMode::BedrockApiKey));
@@ -87,7 +90,8 @@ async fn login_with_bedrock_api_key_replaces_openai_auth() -> anyhow::Result<()>
             | CodexAuth::ChatgptAuthTokens(_)
             | CodexAuth::Headers(_)
             | CodexAuth::AgentIdentity(_)
-            | CodexAuth::PersonalAccessToken(_) => None,
+            | CodexAuth::PersonalAccessToken(_)
+            | CodexAuth::RelayOAuth(_) => None,
         }),
         Some(bedrock_auth())
     );
@@ -151,7 +155,8 @@ async fn bedrock_only_auth_storage_creates_primary_auth() -> anyhow::Result<()> 
             | CodexAuth::ChatgptAuthTokens(_)
             | CodexAuth::Headers(_)
             | CodexAuth::AgentIdentity(_)
-            | CodexAuth::PersonalAccessToken(_) => None,
+            | CodexAuth::PersonalAccessToken(_)
+            | CodexAuth::RelayOAuth(_) => None,
         }),
         Some(bedrock_auth())
     );

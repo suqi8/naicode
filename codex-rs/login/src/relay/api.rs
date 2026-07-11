@@ -187,14 +187,17 @@ impl RelayClient {
             .json(&serde_json::json!({ "code": code }))
             .send()
             .await?;
-        let cookie = extract_session_cookie(&resp)
-            .unwrap_or_else(|| pending.session_cookie.clone());
+        let cookie =
+            extract_session_cookie(&resp).unwrap_or_else(|| pending.session_cookie.clone());
         let body: serde_json::Value = resp
             .json()
             .await
             .map_err(|e| RelayError::Parse(e.to_string()))?;
         if !envelope_ok(&body) {
-            return Err(RelayError::LoginFailed(envelope_message(&body, "两步验证失败")));
+            return Err(RelayError::LoginFailed(envelope_message(
+                &body,
+                "两步验证失败",
+            )));
         }
         let data = body.get("data").cloned().unwrap_or(serde_json::Value::Null);
         let user_id = data
@@ -262,7 +265,11 @@ impl RelayClient {
         id: i64,
     ) -> Result<String, RelayError> {
         let resp = self
-            .authed(reqwest::Method::POST, &format!("/api/token/{id}/key"), session)
+            .authed(
+                reqwest::Method::POST,
+                &format!("/api/token/{id}/key"),
+                session,
+            )
             .send()
             .await?;
         let data = parse_envelope(resp).await?;
@@ -310,7 +317,10 @@ impl RelayClient {
 
     /// 可用分组列表（`GET /api/user/self/groups`）。返回原始 JSON，
     /// 通常是 `{ 分组名: { desc, ratio, ... } }` 映射。
-    pub async fn get_groups(&self, session: &RelaySession) -> Result<serde_json::Value, RelayError> {
+    pub async fn get_groups(
+        &self,
+        session: &RelaySession,
+    ) -> Result<serde_json::Value, RelayError> {
         let resp = self
             .authed(reqwest::Method::GET, "/api/user/self/groups", session)
             .send()
@@ -330,7 +340,10 @@ impl RelayClient {
 
     /// 定价（`GET /api/pricing`）。注意 group_ratio / usable_group 是 data
     /// 的**同级字段**，返回完整 body（不只取 data）。
-    pub async fn get_pricing(&self, session: &RelaySession) -> Result<serde_json::Value, RelayError> {
+    pub async fn get_pricing(
+        &self,
+        session: &RelaySession,
+    ) -> Result<serde_json::Value, RelayError> {
         let resp = self
             .authed(reqwest::Method::GET, "/api/pricing", session)
             .send()

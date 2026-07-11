@@ -48,6 +48,7 @@ pub use crate::auth::storage::AgentIdentityStorage;
 pub use crate::auth::storage::AuthDotJson;
 pub use crate::auth::storage::AuthKeyringBackendKind;
 use crate::auth::storage::AuthStorageBackend;
+pub use crate::auth::storage::RelayOAuthTokens;
 use crate::auth::storage::create_auth_storage;
 use crate::auth::util::try_parse_error_message;
 use crate::default_client::create_client;
@@ -76,6 +77,8 @@ pub enum CodexAuth {
     AgentIdentity(AgentIdentityAuth),
     PersonalAccessToken(PersonalAccessTokenAuth),
     BedrockApiKey(BedrockApiKeyAuth),
+    /// 酸奶中转站 OAuth：持久化的短期 access token + 可轮换 refresh token。
+    RelayOAuth(RelayOAuthAuth),
 }
 
 /// Policy for resolving Agent Identity auth from a broader Codex auth snapshot.
@@ -166,6 +169,79 @@ pub struct ChatgptAuth {
     storage: Arc<dyn AuthStorageBackend>,
 }
 
+/// 酸奶中转站 OAuth 认证态。持有当前 auth.json 快照（含 relay token）与用于
+/// 刷新/换 token 的持久化后端；刷新在 #34 阶段接入 core 的 401 状态机。
+#[derive(Clone)]
+pub struct RelayOAuthAuth {
+    auth_dot_json: Arc<Mutex<AuthDotJson>>,
+    storage: Arc<dyn AuthStorageBackend>,
+}
+
+impl std::fmt::Debug for RelayOAuthAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RelayOAuthAuth").finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for RelayOAuthAuth {
+    fn eq(&self, other: &Self) -> bool {
+        let a = self
+            .auth_dot_json
+            .lock()
+            .ok()
+            .and_then(|g| g.relay_oauth.clone());
+        let b = other
+            .auth_dot_json
+            .lock()
+            .ok()
+            .and_then(|g| g.relay_oauth.clone());
+        a == b
+    }
+}
+
+impl RelayOAuthAuth {
+    /// 返回当前 relay OAuth token 集的克隆。
+    pub fn tokens(&self) -> std::io::Result<RelayOAuthTokens> {
+        let guard = self
+            .auth_dot_json
+            .lock()
+            .map_err(|_| std::io::Error::other("relay auth 锁毒化"))?;
+        guard
+            .relay_oauth
+            .clone()
+            .ok_or_else(|| std::io::Error::other("relay OAuth 凭据缺失"))
+    }
+
+    fn same_rotation_snapshot(&self, other: &Self) -> bool {
+        match (self.tokens(), other.tokens()) {
+            (Ok(a), Ok(b)) => {
+                a.session_id == b.session_id
+                    && a.access_token == b.access_token
+                    && a.refresh_token == b.refresh_token
+                    && a.expires_at == b.expires_at
+            }
+            _ => false,
+        }
+    }
+
+    /// 原子更新内存与持久化中的 relay OAuth token pair（refresh rotation）。
+    pub fn persist_tokens(&self, tokens: RelayOAuthTokens) -> std::io::Result<()> {
+        let mut guard = self
+            .auth_dot_json
+            .lock()
+            .map_err(|_| std::io::Error::other("relay auth 锁毒化"))?;
+        let mut auth = guard.clone();
+        auth.auth_mode = Some(AuthMode::RelayOAuthTokens);
+        auth.openai_api_key = None;
+        auth.tokens = None;
+        auth.relay_oauth = Some(tokens);
+        // 先原子落盘/写凭据库成功，再发布到内存，等待请求不会看到半套 token。
+        self.storage.save(&auth)?;
+        *guard = auth;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ChatgptAuthTokens {
     state: ChatgptAuthState,
@@ -189,6 +265,8 @@ const REFRESH_TOKEN_ACCOUNT_MISMATCH_MESSAGE: &str = "Your access token could no
 const REFRESH_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 pub(super) const REVOKE_TOKEN_URL: &str = "https://auth.openai.com/oauth/revoke";
 pub const REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR: &str = "CODEX_REFRESH_TOKEN_URL_OVERRIDE";
+pub const RELAY_REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR: &str =
+    "NAICODE_RELAY_REFRESH_TOKEN_URL_OVERRIDE";
 pub const REVOKE_TOKEN_URL_OVERRIDE_ENV_VAR: &str = "CODEX_REVOKE_TOKEN_URL_OVERRIDE";
 pub const CLIENT_ID_OVERRIDE_ENV_VAR: &str = "CODEX_APP_SERVER_LOGIN_CLIENT_ID";
 static NEXT_DUMMY_AUTH_ID: AtomicU64 = AtomicU64::new(1);
@@ -199,6 +277,41 @@ pub enum RefreshTokenError {
     Permanent(#[from] RefreshTokenFailedError),
     #[error(transparent)]
     Transient(#[from] std::io::Error),
+}
+
+#[derive(Debug, Error)]
+pub enum RelayRequestError {
+    #[error("尚未登录酸奶中转站，请先运行 `naicode login`")]
+    NotLoggedIn,
+    #[error("酸奶中转站 OAuth 凭据不完整，请重新登录")]
+    InvalidCredentials,
+    #[error("酸奶中转站登录已失效，请重新登录")]
+    ReauthenticationRequired,
+    #[error("连接酸奶中转站失败: {0}")]
+    Network(String),
+    #[error("酸奶中转站拒绝了请求（HTTP {status}）")]
+    Http { status: StatusCode },
+}
+
+impl RelayRequestError {
+    pub fn category(&self) -> &'static str {
+        match self {
+            Self::NotLoggedIn => "not_logged_in",
+            Self::InvalidCredentials => "invalid_credentials",
+            Self::ReauthenticationRequired => "reauthentication_required",
+            Self::Network(_) => "network",
+            Self::Http { .. } => "http",
+        }
+    }
+}
+
+impl From<RefreshTokenError> for RelayRequestError {
+    fn from(error: RefreshTokenError) -> Self {
+        match error {
+            RefreshTokenError::Permanent(_) => Self::ReauthenticationRequired,
+            RefreshTokenError::Transient(error) => Self::Network(error.to_string()),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -316,6 +429,18 @@ impl CodexAuth {
                 "externally provided auth cannot be loaded from auth storage.",
             ));
         }
+        if auth_mode == AuthMode::RelayOAuthTokens {
+            if auth_dot_json.relay_oauth.is_none() {
+                return Err(std::io::Error::other("relay OAuth 凭据缺失"));
+            }
+            let storage_mode = auth_dot_json.storage_mode(auth_credentials_store_mode);
+            let storage =
+                create_auth_storage(codex_home.to_path_buf(), storage_mode, keyring_backend_kind);
+            return Ok(Self::RelayOAuth(RelayOAuthAuth {
+                auth_dot_json: Arc::new(Mutex::new(auth_dot_json)),
+                storage,
+            }));
+        }
 
         let storage_mode = auth_dot_json.storage_mode(auth_credentials_store_mode);
         let client = create_default_auth_client(&refresh_token_endpoint(), auth_route_config)?;
@@ -343,6 +468,9 @@ impl CodexAuth {
                 unreachable!("personal access token mode is handled above")
             }
             AuthMode::BedrockApiKey => unreachable!("bedrock api key mode is handled above"),
+            AuthMode::RelayOAuthTokens => {
+                unreachable!("relay OAuth mode is handled above")
+            }
         }
     }
 
@@ -424,6 +552,7 @@ impl CodexAuth {
             Self::AgentIdentity(_) => AuthMode::AgentIdentity,
             Self::PersonalAccessToken(_) => AuthMode::PersonalAccessToken,
             Self::BedrockApiKey(_) => AuthMode::BedrockApiKey,
+            Self::RelayOAuth(_) => AuthMode::RelayOAuthTokens,
         }
     }
 
@@ -437,6 +566,7 @@ impl CodexAuth {
             Self::AgentIdentity(_) => AuthMode::AgentIdentity,
             Self::PersonalAccessToken(_) => AuthMode::PersonalAccessToken,
             Self::BedrockApiKey(_) => AuthMode::BedrockApiKey,
+            Self::RelayOAuth(_) => AuthMode::RelayOAuthTokens,
         }
     }
 
@@ -463,7 +593,7 @@ impl CodexAuth {
     fn supports_unauthorized_recovery(&self) -> bool {
         matches!(
             self,
-            Self::Chatgpt(_) | Self::ChatgptAuthTokens(_) | Self::Headers(_)
+            Self::Chatgpt(_) | Self::ChatgptAuthTokens(_) | Self::Headers(_) | Self::RelayOAuth(_)
         )
     }
 
@@ -476,7 +606,8 @@ impl CodexAuth {
             | Self::Headers(_)
             | Self::AgentIdentity(_)
             | Self::PersonalAccessToken(_)
-            | Self::BedrockApiKey(_) => None,
+            | Self::BedrockApiKey(_)
+            | Self::RelayOAuth(_) => None,
         }
     }
 
@@ -511,6 +642,8 @@ impl CodexAuth {
             Self::BedrockApiKey(_) => Err(std::io::Error::other(
                 "Bedrock API key auth does not expose a Codex bearer token",
             )),
+            // 返回当前 relay access token；到期前主动刷新在 #34 的 core 401 状态机接入。
+            Self::RelayOAuth(auth) => Ok(auth.tokens()?.access_token),
         }
     }
 
@@ -520,6 +653,7 @@ impl CodexAuth {
             Self::Headers(_) => None,
             Self::AgentIdentity(auth) => Some(auth.account_id().to_string()),
             Self::PersonalAccessToken(auth) => Some(auth.account_id().to_string()),
+            Self::RelayOAuth(auth) => auth.tokens().ok().and_then(|t| t.account_id),
             _ => self.get_current_token_data().and_then(|t| t.account_id),
         }
     }
@@ -594,7 +728,8 @@ impl CodexAuth {
             | Self::Headers(_)
             | Self::AgentIdentity(_)
             | Self::PersonalAccessToken(_)
-            | Self::BedrockApiKey(_) => return None,
+            | Self::BedrockApiKey(_)
+            | Self::RelayOAuth(_) => return None,
         };
         #[expect(clippy::unwrap_used)]
         state.auth_dot_json.lock().unwrap().clone()
@@ -639,7 +774,8 @@ impl CodexAuth {
             | Self::ChatgptAuthTokens(_)
             | Self::Headers(_)
             | Self::PersonalAccessToken(_)
-            | Self::BedrockApiKey(_) => Ok(None),
+            | Self::BedrockApiKey(_)
+            | Self::RelayOAuth(_) => Ok(None),
             Self::Chatgpt(_) => {
                 if policy == AgentIdentityAuthPolicy::JwtOnly {
                     return Ok(None);
@@ -712,6 +848,7 @@ impl CodexAuth {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         };
 
         let state = ChatgptAuthState {
@@ -916,6 +1053,7 @@ pub fn login_with_api_key(
         agent_identity: None,
         personal_access_token: None,
         bedrock_api_key: None,
+        relay_oauth: None,
     };
     save_auth(
         codex_home,
@@ -949,6 +1087,7 @@ pub async fn login_with_access_token(
                 agent_identity: None,
                 personal_access_token: Some(access_token.to_string()),
                 bedrock_api_key: None,
+                relay_oauth: None,
             }
         }
         CodexAccessToken::AgentIdentityJwt(jwt) => {
@@ -965,6 +1104,7 @@ pub async fn login_with_access_token(
                 agent_identity: Some(AgentIdentityStorage::Jwt(jwt.to_string())),
                 personal_access_token: None,
                 bedrock_api_key: None,
+                relay_oauth: None,
             }
         }
     };
@@ -1081,7 +1221,8 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
     if let Some(required_method) = config.forced_login_method {
         let method_violation = match (required_method, auth.auth_mode()) {
             (ForcedLoginMethod::Api, AuthMode::ApiKey)
-            | (ForcedLoginMethod::Api, AuthMode::BedrockApiKey) => None,
+            | (ForcedLoginMethod::Api, AuthMode::BedrockApiKey)
+            | (ForcedLoginMethod::Api, AuthMode::RelayOAuthTokens) => None,
             (ForcedLoginMethod::Chatgpt, AuthMode::Chatgpt)
             | (ForcedLoginMethod::Chatgpt, AuthMode::ChatgptAuthTokens)
             | (ForcedLoginMethod::Chatgpt, AuthMode::Headers)
@@ -1096,7 +1237,8 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
                     .to_string(),
             ),
             (ForcedLoginMethod::Chatgpt, AuthMode::ApiKey)
-            | (ForcedLoginMethod::Chatgpt, AuthMode::BedrockApiKey) => Some(
+            | (ForcedLoginMethod::Chatgpt, AuthMode::BedrockApiKey)
+            | (ForcedLoginMethod::Chatgpt, AuthMode::RelayOAuthTokens) => Some(
                 "ChatGPT login is required, but an API key is currently being used. Logging out."
                     .to_string(),
             ),
@@ -1114,7 +1256,10 @@ async fn enforce_login_restrictions_with_agent_identity_authapi_base_url(
 
     if let Some(expected_account_ids) = config.forced_chatgpt_workspace_id.as_deref() {
         let chatgpt_account_id = match &auth {
-            CodexAuth::ApiKey(_) | CodexAuth::Headers(_) | CodexAuth::BedrockApiKey(_) => {
+            CodexAuth::ApiKey(_)
+            | CodexAuth::Headers(_)
+            | CodexAuth::BedrockApiKey(_)
+            | CodexAuth::RelayOAuth(_) => {
                 return Ok(());
             }
             CodexAuth::AgentIdentity(_) | CodexAuth::PersonalAccessToken(_) => {
@@ -1329,6 +1474,62 @@ fn persist_tokens(
     Ok(auth_dot_json)
 }
 
+async fn request_and_persist_relay_refresh(auth: &RelayOAuthAuth) -> Result<(), RefreshTokenError> {
+    #[derive(Deserialize)]
+    struct RelayRefreshResponse {
+        access_token: String,
+        refresh_token: String,
+        expires_in: i64,
+        session_id: String,
+    }
+
+    let current = auth.tokens().map_err(RefreshTokenError::Transient)?;
+    let client = create_client();
+    let endpoint = std::env::var(RELAY_REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR)
+        .unwrap_or_else(|_| "https://closedai.kylenqaq.com/api/cli/oauth/token".to_string());
+    let encoded = format!(
+        "grant_type=refresh_token&client_id=naicode-cli&refresh_token={}",
+        urlencoding::encode(&current.refresh_token)
+    );
+    let response = client
+        .post(endpoint)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(encoded)
+        .send()
+        .await
+        .map_err(|err| RefreshTokenError::Transient(std::io::Error::other(err)))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        let permanent = status == StatusCode::UNAUTHORIZED
+            || status == StatusCode::BAD_REQUEST && body.contains("invalid_grant");
+        if permanent {
+            return Err(RefreshTokenError::Permanent(RefreshTokenFailedError::new(
+                RefreshTokenFailedReason::Revoked,
+                "酸奶中转站登录已失效，请重新登录。".to_string(),
+            )));
+        }
+        return Err(RefreshTokenError::Transient(std::io::Error::other(
+            format!("刷新酸奶中转站登录失败: {status}"),
+        )));
+    }
+    let refreshed = response
+        .json::<RelayRefreshResponse>()
+        .await
+        .map_err(|err| RefreshTokenError::Transient(std::io::Error::other(err)))?;
+    auth.persist_tokens(RelayOAuthTokens {
+        access_token: refreshed.access_token,
+        refresh_token: refreshed.refresh_token,
+        expires_at: Utc::now().timestamp() + refreshed.expires_in,
+        session_id: refreshed.session_id,
+        account_id: current.account_id,
+        account_name: current.account_name,
+        device_name: current.device_name,
+    })
+    .map_err(RefreshTokenError::Transient)?;
+    Ok(())
+}
+
 // Requests refreshed ChatGPT OAuth tokens from the auth service using a refresh token.
 // The caller is responsible for persisting any returned tokens.
 async fn request_chatgpt_token_refresh(
@@ -1485,6 +1686,7 @@ impl AuthDotJson {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         })
     }
 
@@ -1497,6 +1699,9 @@ impl AuthDotJson {
         }
         if self.bedrock_api_key.is_some() {
             return AuthMode::BedrockApiKey;
+        }
+        if self.relay_oauth.is_some() {
+            return AuthMode::RelayOAuthTokens;
         }
         if self.openai_api_key.is_some() {
             return AuthMode::ApiKey;
@@ -2159,6 +2364,12 @@ impl AuthManager {
                 },
                 (AuthMode::PersonalAccessToken, AuthMode::PersonalAccessToken) => a == b,
                 (AuthMode::BedrockApiKey, AuthMode::BedrockApiKey) => a == b,
+                (AuthMode::RelayOAuthTokens, AuthMode::RelayOAuthTokens) => match (a, b) {
+                    (CodexAuth::RelayOAuth(a), CodexAuth::RelayOAuth(b)) => {
+                        a.same_rotation_snapshot(b)
+                    }
+                    _ => false,
+                },
                 _ => false,
             },
             _ => false,
@@ -2359,6 +2570,83 @@ impl AuthManager {
         Ok(auth)
     }
 
+    async fn reload_relay_auth(&self, expected: &CodexAuth) -> Result<bool, RefreshTokenError> {
+        let loaded = self.load_auth().await;
+        let Some(CodexAuth::RelayOAuth(_)) = loaded.as_ref() else {
+            return Err(RefreshTokenError::Permanent(RefreshTokenFailedError::new(
+                RefreshTokenFailedReason::Revoked,
+                "酸奶中转站登录已失效，请重新登录。".to_string(),
+            )));
+        };
+        let changed = !Self::auths_equal_for_refresh(Some(expected), loaded.as_ref());
+        self.set_cached_auth(loaded);
+        Ok(changed)
+    }
+
+    /// Execute one Relay OAuth request and retry it at most once after a 401.
+    ///
+    /// Recovery is serialized with the same refresh lock used by model requests. Inside the lock
+    /// credentials are reloaded from the configured file/keyring backend. A changed snapshot is
+    /// retried directly; an unchanged snapshot is refreshed before retrying.
+    pub async fn execute_relay_request<F>(
+        &self,
+        build_request: F,
+    ) -> Result<reqwest::Response, RelayRequestError>
+    where
+        F: Fn(&str) -> reqwest::RequestBuilder,
+    {
+        let mut auth = self.auth_cached().ok_or(RelayRequestError::NotLoggedIn)?;
+        if Self::should_refresh_proactively(&auth) {
+            self.refresh_token().await?;
+            auth = self
+                .auth_cached()
+                .ok_or(RelayRequestError::ReauthenticationRequired)?;
+        }
+        let CodexAuth::RelayOAuth(relay_auth) = &auth else {
+            return Err(RelayRequestError::InvalidCredentials);
+        };
+        let snapshot = relay_auth
+            .tokens()
+            .map_err(|_| RelayRequestError::InvalidCredentials)?;
+        if snapshot.access_token.trim().is_empty()
+            || snapshot.refresh_token.trim().is_empty()
+            || snapshot.session_id.trim().is_empty()
+        {
+            return Err(RelayRequestError::InvalidCredentials);
+        }
+
+        let response = build_request(&snapshot.access_token)
+            .send()
+            .await
+            .map_err(|error| RelayRequestError::Network(error.to_string()))?;
+        if response.status() != StatusCode::UNAUTHORIZED {
+            return Ok(response);
+        }
+
+        let _refresh_guard = self
+            .refresh_lock
+            .acquire()
+            .await
+            .map_err(|_| RelayRequestError::ReauthenticationRequired)?;
+        let changed = self.reload_relay_auth(&auth).await?;
+        if !changed {
+            self.refresh_token_from_authority_impl().await?;
+        }
+        let retry_auth = self
+            .auth_cached()
+            .ok_or(RelayRequestError::ReauthenticationRequired)?;
+        let CodexAuth::RelayOAuth(retry_relay_auth) = retry_auth else {
+            return Err(RelayRequestError::ReauthenticationRequired);
+        };
+        let retry_tokens = retry_relay_auth
+            .tokens()
+            .map_err(|_| RelayRequestError::ReauthenticationRequired)?;
+        build_request(&retry_tokens.access_token)
+            .send()
+            .await
+            .map_err(|error| RelayRequestError::Network(error.to_string()))
+    }
+
     /// Attempt to refresh the token by first performing a guarded reload from
     /// the active auth source. If the loaded token differs from the cached token,
     /// we can assume that the source already refreshed it. Otherwise, ask the
@@ -2438,6 +2726,9 @@ impl AuthManager {
                     self.refresh_and_persist_chatgpt_token(&chatgpt_auth, token_data.refresh_token)
                         .await
                 }
+                CodexAuth::RelayOAuth(relay_auth) => {
+                    request_and_persist_relay_refresh(&relay_auth).await
+                }
                 CodexAuth::ApiKey(_)
                 | CodexAuth::ChatgptAuthTokens(_)
                 | CodexAuth::Headers(_)
@@ -2504,6 +2795,13 @@ impl AuthManager {
     }
 
     fn should_refresh_proactively(auth: &CodexAuth) -> bool {
+        // Relay OAuth 使用服务端明确返回的 expires_at，并在到期前 60 秒主动刷新。
+        if let CodexAuth::RelayOAuth(relay_auth) = auth {
+            return relay_auth
+                .tokens()
+                .is_ok_and(|tokens| tokens.expires_at <= Utc::now().timestamp() + 60);
+        }
+
         let chatgpt_auth = match auth {
             CodexAuth::Chatgpt(chatgpt_auth) => chatgpt_auth,
             _ => return false,
