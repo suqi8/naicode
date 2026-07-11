@@ -30,6 +30,7 @@ impl ChatWidget {
         }
         match notification {
             ServerNotification::ThreadTokenUsageUpdated(notification) => {
+                self.token_info_turn_id = Some(notification.turn_id.clone());
                 self.set_token_info(Some(token_usage_info_from_app_server(
                     notification.token_usage,
                 )));
@@ -59,6 +60,7 @@ impl ChatWidget {
             }
             ServerNotification::TurnStarted(notification) => {
                 self.turn_lifecycle.last_turn_id = Some(notification.turn.id);
+                self.token_info_turn_id = None;
                 self.last_non_retry_error = None;
                 if !matches!(replay_kind, Some(ReplayKind::ResumeInitialMessages)) {
                     self.on_task_started();
@@ -229,6 +231,55 @@ impl ChatWidget {
         }
     }
 
+    fn turn_usage_summary_line(&self, turn_id: &str) -> Option<Line<'static>> {
+        if self.token_info_turn_id.as_deref() != Some(turn_id) {
+            return None;
+        }
+        let usage = &self.token_info.as_ref()?.last_token_usage;
+        if usage.is_zero() {
+            return None;
+        }
+
+        let balance = self
+            .rate_limit_snapshots_by_limit_id
+            .get("codex")
+            .or_else(|| self.rate_limit_snapshots_by_limit_id.values().next())
+            .and_then(|snapshot| snapshot.credits.as_ref())
+            .and_then(|credits| {
+                if credits.unlimited {
+                    Some("不限额".to_string())
+                } else {
+                    credits.balance.clone()
+                }
+            });
+
+        let mut text = format!(
+            "  本轮 {} tokens · 入 {}",
+            format_tokens_compact(usage.total_tokens),
+            format_tokens_compact(usage.input_tokens),
+        );
+        if usage.cached_input_tokens > 0 {
+            text.push_str(&format!(
+                "（缓存 {}）",
+                format_tokens_compact(usage.cached_input_tokens)
+            ));
+        }
+        text.push_str(&format!(
+            " · 出 {}",
+            format_tokens_compact(usage.output_tokens)
+        ));
+        if usage.reasoning_output_tokens > 0 {
+            text.push_str(&format!(
+                " · 推理 {}",
+                format_tokens_compact(usage.reasoning_output_tokens)
+            ));
+        }
+        if let Some(balance) = balance {
+            text.push_str(&format!(" · 余额 {balance}"));
+        }
+        Some(Line::from(text.dim()))
+    }
+
     pub(super) fn handle_turn_completed_notification(
         &mut self,
         notification: TurnCompletedNotification,
@@ -241,11 +292,18 @@ impl ChatWidget {
         match notification.turn.status {
             TurnStatus::Completed => {
                 self.last_non_retry_error = None;
+                let turn_id = notification.turn.id.clone();
                 self.on_task_complete(
                     /*last_agent_message*/ None,
                     notification.turn.duration_ms,
                     replay_kind.is_some(),
-                )
+                );
+                if replay_kind.is_none()
+                    && let Some(line) = self.turn_usage_summary_line(turn_id.as_str())
+                {
+                    self.add_plain_history_lines(vec![line]);
+                }
+                self.token_info_turn_id = None;
             }
             TurnStatus::Interrupted => {
                 self.last_non_retry_error = None;

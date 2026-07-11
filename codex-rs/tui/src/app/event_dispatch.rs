@@ -616,7 +616,14 @@ impl App {
                     }
                 }
             }
-            AppEvent::PendingRelayModelSelection { group, model, effort } => {
+            AppEvent::OpenRelayReasoningPopup { group, model } => {
+                self.chat_widget.open_relay_reasoning_popup(group, model);
+            }
+            AppEvent::PendingRelayModelSelection {
+                group,
+                model,
+                effort,
+            } => {
                 let pending = crate::app_event::RelaySelectionPending {
                     group,
                     model,
@@ -629,6 +636,7 @@ impl App {
                 let tx = self.app_event_tx.clone();
                 let codex_home = self.chat_widget.config_ref().codex_home.clone();
                 let model = pending.model.clone();
+                let effort = pending.effort.clone();
                 let group = pending.group.clone();
                 // TODO: 切换到 codex_login::relay_switch_group_remote_only(auth_manager,
                 //       codex_home, group)，待该函数对外公开后替换。目前使用
@@ -638,13 +646,15 @@ impl App {
                     match result {
                         Ok(()) => {
                             tx.send(AppEvent::UpdateModel(model.clone()));
+                            tx.send(AppEvent::UpdateReasoningEffort(effort.clone()));
                             tx.send(AppEvent::PersistModelSelection {
                                 model: model.clone(),
-                                effort: None,
+                                effort: effort.clone(),
                             });
                             tx.send(AppEvent::RelaySelectionApplied {
                                 group: group.clone(),
                                 model,
+                                effort,
                             });
                         }
                         Err(e) => {
@@ -659,9 +669,17 @@ impl App {
                 // 简化版本：步骤完成事件目前由 ApplyRelaySelection 内联处理，
                 // 完整状态机留待后续完善。
             }
-            AppEvent::RelaySelectionApplied { group, model } => {
+            AppEvent::RelaySelectionApplied {
+                group,
+                model,
+                effort,
+            } => {
+                let effort = effort
+                    .as_ref()
+                    .map(crate::chatwidget::ChatWidget::reasoning_effort_label)
+                    .unwrap_or_else(|| "默认".to_string());
                 self.chat_widget.add_info_message(
-                    format!("已切换到分组「{group}」模型「{model}」"),
+                    format!("已切换到分组「{group}」模型「{model}」· 思考等级「{effort}」"),
                     /*hint*/ None,
                 );
             }

@@ -489,6 +489,12 @@ pub(crate) enum AppEvent {
         result: Result<String, String>,
     },
 
+    /// naicode: 为 Relay 模型选择其支持的思考等级。
+    OpenRelayReasoningPopup {
+        group: String,
+        model: String,
+    },
+
     /// naicode: 待应用的 Relay 模型切换选择，包含分组、模型和思考等级。
     /// 仅在用户确认后由 apply_relay_selection 状态机消费。
     PendingRelayModelSelection {
@@ -511,6 +517,7 @@ pub(crate) enum AppEvent {
     RelaySelectionApplied {
         group: String,
         model: String,
+        effort: Option<ReasoningEffort>,
     },
 
     /// naicode: Relay 模型切换失败且补偿成功（已恢复原状态）。
@@ -1184,8 +1191,7 @@ pub(crate) enum RelaySelectionStep {
     RemoteGroupSwitched {
         snapshot_remote_group: Option<String>,
         snapshot_local_config_model: String,
-        snapshot_local_config_effort:
-            Option<ReasoningEffort>,
+        snapshot_local_config_effort: Option<ReasoningEffort>,
     },
     /// 本地 model/effort 已原子写入。
     LocalConfigWritten,

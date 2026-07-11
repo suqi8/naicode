@@ -126,9 +126,7 @@ impl ChatWidget {
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
             title: Some("酸奶中转站分组".to_string()),
-            subtitle: Some(
-                "选分组后展示该分组内的完整价格；选模型后再选思考等级".to_string(),
-            ),
+            subtitle: Some("选分组后展示该分组内的完整价格；选模型后再选思考等级".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             ..Default::default()
@@ -192,8 +190,7 @@ impl ChatWidget {
             title: Some(format!("分组「{group}」的可用模型")),
             subtitle: Some(format!(
                 "选中即切到该分组并设为默认模型（{}/{}）",
-                pricing.display.currency_symbol,
-                pricing.display.token_unit,
+                pricing.display.currency_symbol, pricing.display.token_unit,
             )),
             footer_hint: Some(standard_popup_hint_line()),
             items,
@@ -534,6 +531,79 @@ impl ChatWidget {
         });
     }
 
+    pub(crate) fn open_relay_reasoning_popup(&mut self, group: String, model: String) {
+        let preset = self
+            .model_catalog
+            .try_list_models()
+            .ok()
+            .and_then(|models| models.into_iter().find(|preset| preset.model == model));
+
+        let (choices, default_effort) = if let Some(preset) = preset {
+            let mut choices: Vec<ReasoningEffortConfig> = preset
+                .supported_reasoning_efforts
+                .iter()
+                .map(|option| option.effort.clone())
+                .collect();
+            if choices.is_empty() {
+                choices.push(preset.default_reasoning_effort.clone());
+            }
+            (choices, Some(preset.default_reasoning_effort))
+        } else {
+            (Vec::new(), None)
+        };
+
+        let mut items = Vec::new();
+        if choices.is_empty() {
+            let group = group.clone();
+            let model = model.clone();
+            items.push(SelectionItem {
+                name: "默认（由模型服务决定）".to_string(),
+                description: Some("目录未提供该模型的思考等级能力。".to_string()),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::PendingRelayModelSelection {
+                        group: group.clone(),
+                        model: model.clone(),
+                        effort: None,
+                    });
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            });
+        } else {
+            for effort in choices {
+                let is_default = default_effort.as_ref() == Some(&effort);
+                let mut label = Self::reasoning_effort_label(&effort);
+                if is_default {
+                    label.push_str("（默认）");
+                }
+                let group = group.clone();
+                let model = model.clone();
+                items.push(SelectionItem {
+                    name: label,
+                    description: None,
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::PendingRelayModelSelection {
+                            group: group.clone(),
+                            model: model.clone(),
+                            effort: Some(effort.clone()),
+                        });
+                    })],
+                    dismiss_on_select: true,
+                    ..Default::default()
+                });
+            }
+        }
+
+        self.bottom_pane.show_selection_view(SelectionViewParams {
+            title: Some(format!("{model} · 思考等级")),
+            subtitle: Some(format!("分组 {group} · 确认后再应用模型与分组")),
+            footer_hint: Some(standard_popup_hint_line()),
+            items,
+            ..Default::default()
+        });
+        self.request_redraw();
+    }
+
     /// Open a popup to choose the reasoning effort (stage 2) for the given model.
     pub(crate) fn open_reasoning_popup(&mut self, preset: ModelPreset) {
         let default_effort = preset.default_reasoning_effort;
@@ -688,7 +758,7 @@ impl ChatWidget {
         });
     }
 
-    pub(super) fn reasoning_effort_label(effort: &ReasoningEffortConfig) -> String {
+    pub(crate) fn reasoning_effort_label(effort: &ReasoningEffortConfig) -> String {
         match effort {
             ReasoningEffortConfig::None => "无".to_string(),
             ReasoningEffortConfig::Minimal => "极简".to_string(),

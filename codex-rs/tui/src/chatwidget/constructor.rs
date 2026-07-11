@@ -62,7 +62,14 @@ impl ChatWidget {
             settings: fallback_default,
         };
 
-        let active_cell = Some(Self::placeholder_session_header_cell(&config));
+        // Only show the placeholder header on the very first session start.
+        // /clear, resume, fork, and replay all pass is_first_run=false and
+        // should not flash a big logo box while the session is configuring.
+        let active_cell: Option<Box<dyn HistoryCell>> = if is_first_run {
+            Some(Self::placeholder_session_header_cell(&config))
+        } else {
+            None
+        };
 
         let current_cwd = Some(config.cwd.to_path_buf());
         let effective_service_tier = crate::service_tier_resolution::effective_service_tier(
@@ -123,6 +130,7 @@ impl ChatWidget {
             runtime_model_provider_base_url,
             remote_connection: None,
             token_info: None,
+            token_info_turn_id: None,
             rate_limit_snapshots_by_limit_id: BTreeMap::new(),
             refreshing_status_outputs: Vec::new(),
             next_status_refresh_request_id: 0,

@@ -8,24 +8,31 @@
 //! - `72..=95`：左侧分组 + 右侧模型（两列价格）
 //! - `< 72`：顶行显示当前组名，仅右侧单列价格
 
+use std::cell::Cell;
+
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::ViewCompletion;
 use crate::bottom_pane::scroll_state::ScrollState;
+use crate::product_palette;
 use crate::render::renderable::Renderable;
-use codex_login::format_price_value;
 use codex_login::GroupInfo;
 use codex_login::PricingModel;
+use codex_login::format_price_value;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 
-/// 每张模型卡片固定占用的终端行数（模型名 + 价格行1 + 价格行2）。
-const CARD_HEIGHT: usize = 3;
+/// 每个模型固定占两行：模型名和高频价格摘要。
+const CARD_HEIGHT: usize = 2;
+
+const READY_HEIGHT_WIDE: u16 = 14;
+const READY_HEIGHT_NARROW: u16 = 13;
+const DETAIL_HEIGHT: u16 = 2;
 
 /// 宽屏模式下左侧分组列表的列数（含左边框内边距）。
 const GROUP_COL_WIDTH: u16 = 18;
@@ -71,6 +78,8 @@ pub(crate) struct RelayModelPicker {
     app_event_tx: AppEventSender,
     /// 当前已选分组名；None 时使用第一个分组。
     selected_group: Option<String>,
+    /// 最近一次渲染中模型列表可见卡片数。
+    visible_model_cards: Cell<usize>,
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +132,7 @@ impl RelayModelPicker {
             completion: None,
             app_event_tx,
             selected_group,
+            visible_model_cards: Cell::new(1),
         };
         picker.init_group_scroll();
         picker.model_scroll.selected_idx = Some(0);
@@ -210,7 +220,9 @@ impl RelayModelPicker {
         let tail = keep - head;
         let head_str: String = name.chars().take(head).collect();
         let all_chars: Vec<char> = name.chars().collect();
-        let tail_str: String = all_chars[all_chars.len().saturating_sub(tail)..].iter().collect();
+        let tail_str: String = all_chars[all_chars.len().saturating_sub(tail)..]
+            .iter()
+            .collect();
         format!("{head_str}...{tail_str}")
     }
 
@@ -234,10 +246,9 @@ impl RelayModelPicker {
         let filtered = self.filtered_models(raw_models);
         let idx = self.model_scroll.selected_idx.unwrap_or(0);
         if let Some(model) = filtered.get(idx) {
-            self.app_event_tx.send(AppEvent::PendingRelayModelSelection {
+            self.app_event_tx.send(AppEvent::OpenRelayReasoningPopup {
                 group: group_name,
                 model: model.model_name.clone(),
-                effort: None,
             });
             self.is_complete = true;
             self.completion = Some(ViewCompletion::Accepted);
@@ -263,7 +274,70 @@ impl RelayModelPicker {
 
     // --- 渲染辅助 ---
 
-    /// 构建单张模型卡片的行列表（CARD_HEIGHT 行）。
+    fn format_price(value: Option<f64>, currency_symbol: &str) -> String {
+        let formatted = format_price_value(value);
+        if formatted == "—" {
+            formatted
+        } else {
+            format!("{currency_symbol}{formatted}")
+        }
+    }
+
+    fn detail_line(
+        price: Option<&codex_login::EffectivePrice>,
+        display: &codex_login::PricingDisplay,
+        width: usize,
+    ) -> Line<'static> {
+        let palette = product_palette::current();
+        let muted = Style::default().fg(palette.border_muted);
+        let value = Style::default().fg(palette.accent_bright);
+        let symbol = price
+            .map(|price| price.currency_symbol.as_str())
+            .filter(|symbol| !symbol.is_empty())
+            .unwrap_or(display.currency_symbol.as_str());
+        let token_unit = if display.token_unit.is_empty() {
+            "1M tokens"
+        } else {
+            display.token_unit.as_str()
+        };
+
+        let mut fields = Vec::new();
+        if let Some(price) = price {
+            for (label, amount) in [
+                ("图片", price.image_input),
+                ("音频入", price.audio_input),
+                ("音频出", price.audio_output),
+                ("按次", price.request),
+                ("缓存1h", price.cache_create_1h),
+            ] {
+                if amount.is_some() {
+                    fields.push((label, Self::format_price(amount, symbol)));
+                }
+            }
+            if price.basis == "dynamic_expression" {
+                fields.push(("计费", "动态".to_string()));
+            }
+        }
+
+        if fields.is_empty() {
+            fields.push(("单位", token_unit.to_string()));
+        }
+
+        let mut spans = vec![Span::styled("详情  ", muted)];
+        for (index, (label, amount)) in fields.into_iter().enumerate() {
+            if index > 0 {
+                spans.push(Span::styled("  ", muted));
+            }
+            spans.push(Span::styled(format!("{label} "), muted));
+            spans.push(Span::styled(amount, value));
+        }
+        if width >= 72 && !token_unit.is_empty() {
+            spans.push(Span::styled(format!("  · {token_unit}"), muted));
+        }
+        Line::from(spans)
+    }
+
+    /// 构建模型名和高频价格摘要两行。
     fn model_card_lines(
         model: &PricingModel,
         price: Option<&codex_login::EffectivePrice>,
@@ -272,77 +346,75 @@ impl RelayModelPicker {
         currency_symbol: &str,
         mode: LayoutMode,
     ) -> Vec<Line<'static>> {
+        let palette = product_palette::current();
         let name_style = if is_selected {
             Style::default()
-                .fg(Color::Yellow)
+                .fg(palette.selection_foreground)
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default()
+            Style::default().add_modifier(Modifier::BOLD)
         };
-        let dim = Style::default().fg(Color::DarkGray);
-        let price_style = Style::default().fg(Color::Cyan);
+        let dim = Style::default().fg(palette.border_muted);
+        let price_style = Style::default().fg(palette.accent_bright);
 
         let name = Self::truncate_middle(&model.model_name, name_max_cols);
         let name_line = Line::from(vec![Span::styled(name, name_style)]);
 
         let sym = currency_symbol;
-        let input_s = format_price_value(price.and_then(|p| p.input));
-        let output_s = format_price_value(price.and_then(|p| p.output));
-        let cache_read_s = format_price_value(price.and_then(|p| p.cache_read));
-        let cache_write_s = format_price_value(
+
+        let input_s = Self::format_price(price.and_then(|p| p.input), sym);
+        let output_s = Self::format_price(price.and_then(|p| p.output), sym);
+        let cache_r = Self::format_price(price.and_then(|p| p.cache_read), sym);
+        let cache_w = Self::format_price(
             price.and_then(|p| p.cache_create_5m.or(p.cache_create_1h)),
+            sym,
         );
 
-        match mode {
-            LayoutMode::Wide | LayoutMode::Medium => {
-                let price_line1 = Line::from(vec![
-                    Span::styled("  输入 ", dim),
-                    Span::styled(format!("{sym}{input_s}"), price_style),
-                    Span::styled("  输出 ", dim),
-                    Span::styled(format!("{sym}{output_s}"), price_style),
-                ]);
-                let price_line2 = Line::from(vec![
-                    Span::styled("  缓存读 ", dim),
-                    Span::styled(format!("{sym}{cache_read_s}"), price_style),
-                    Span::styled("  缓存写 ", dim),
-                    Span::styled(format!("{sym}{cache_write_s}"), price_style),
-                ]);
-                vec![name_line, price_line1, price_line2]
-            }
-            LayoutMode::Narrow => {
-                let price_line1 = Line::from(vec![
-                    Span::styled("  输入 ", dim),
-                    Span::styled(format!("{sym}{input_s}"), price_style),
-                    Span::styled("  输出 ", dim),
-                    Span::styled(format!("{sym}{output_s}"), price_style),
-                ]);
-                // 窄模式：第三行显示缓存（若均为 — 则显示空行作分隔）
-                let price_line2 = if cache_read_s == "—" && cache_write_s == "—" {
-                    Line::from("")
-                } else {
-                    Line::from(vec![
-                        Span::styled("  缓存读 ", dim),
-                        Span::styled(format!("{sym}{cache_read_s}"), price_style),
-                        Span::styled("  缓存写 ", dim),
-                        Span::styled(format!("{sym}{cache_write_s}"), price_style),
-                    ])
-                };
-                vec![name_line, price_line1, price_line2]
-            }
-        }
+        let price_line = match mode {
+            LayoutMode::Wide => Line::from(vec![
+                Span::styled("  输入 ", dim),
+                Span::styled(input_s, price_style),
+                Span::styled("  输出 ", dim),
+                Span::styled(output_s, price_style),
+                Span::styled("  缓存读 ", dim),
+                Span::styled(cache_r, price_style),
+                Span::styled("  缓存写 ", dim),
+                Span::styled(cache_w, price_style),
+            ]),
+            LayoutMode::Medium => Line::from(vec![
+                Span::styled("  入 ", dim),
+                Span::styled(input_s, price_style),
+                Span::styled("  出 ", dim),
+                Span::styled(output_s, price_style),
+                Span::styled("  缓存 ", dim),
+                Span::styled(cache_r, price_style),
+                Span::styled(" / ", dim),
+                Span::styled(cache_w, price_style),
+            ]),
+            LayoutMode::Narrow => Line::from(vec![
+                Span::styled("  入 ", dim),
+                Span::styled(input_s, price_style),
+                Span::styled("  出 ", dim),
+                Span::styled(output_s, price_style),
+            ]),
+        };
+
+        vec![name_line, price_line]
     }
 
     // --- 分段渲染 ---
 
     fn render_loading(area: Rect, buf: &mut Buffer) {
-        let p = Paragraph::new("正在获取分组与价格…")
-            .style(Style::default().fg(Color::Gray));
+        let palette = product_palette::current();
+        let p =
+            Paragraph::new("正在获取分组与价格…").style(Style::default().fg(palette.accent_bright));
         ratatui::widgets::Widget::render(p, area, buf);
     }
 
     fn render_error(msg: &str, area: Rect, buf: &mut Buffer) {
+        let palette = product_palette::current();
         let text = format!("{msg}\n\n按 Esc 关闭");
-        let p = Paragraph::new(text).style(Style::default().fg(Color::Red));
+        let p = Paragraph::new(text).style(Style::default().fg(palette.status_error));
         ratatui::widgets::Widget::render(p, area, buf);
     }
 
@@ -381,12 +453,13 @@ impl RelayModelPicker {
                     area.width,
                     area.height.saturating_sub(1),
                 );
+                let palette = product_palette::current();
                 let header = Line::from(vec![
-                    Span::styled("组: ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("组: ", Style::default().fg(palette.border_muted)),
                     Span::styled(
                         group_name.to_string(),
                         Style::default()
-                            .fg(Color::Cyan)
+                            .fg(palette.accent_bright)
                             .add_modifier(Modifier::BOLD),
                     ),
                 ]);
@@ -404,15 +477,19 @@ impl RelayModelPicker {
         area: Rect,
         buf: &mut Buffer,
     ) {
+        let palette = product_palette::current();
         let focused = self.focus_side == FocusSide::Groups;
-        let border_style = if focused {
-            Style::default().fg(Color::Yellow)
+        let border_style = Style::default().fg(if focused {
+            palette.border_focused
         } else {
-            Style::default().fg(Color::DarkGray)
-        };
+            palette.border_muted
+        });
 
         let inner = Block::default()
-            .title(Span::styled("分组", Style::default().add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                "分组",
+                Style::default().add_modifier(Modifier::BOLD),
+            ))
             .borders(Borders::ALL)
             .border_style(border_style);
 
@@ -435,10 +512,11 @@ impl RelayModelPicker {
                 let label = format!("{marker} {}", g.name);
                 let style = if is_sel && focused {
                     Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD | Modifier::REVERSED)
+                        .fg(palette.selection_foreground)
+                        .bg(palette.selection_background)
+                        .add_modifier(Modifier::BOLD)
                 } else if is_cur {
-                    Style::default().fg(Color::Cyan)
+                    Style::default().fg(palette.accent_bright)
                 } else {
                     Style::default()
                 };
@@ -451,10 +529,11 @@ impl RelayModelPicker {
     }
 
     fn render_divider(area: Rect, buf: &mut Buffer) {
+        let palette = product_palette::current();
         for y in area.y..area.y + area.height {
             if let Some(cell) = buf.cell_mut((area.x, y)) {
                 cell.set_symbol("│");
-                cell.set_style(Style::default().fg(Color::DarkGray));
+                cell.set_style(Style::default().fg(palette.border_muted));
             }
         }
     }
@@ -468,25 +547,26 @@ impl RelayModelPicker {
         area: Rect,
         buf: &mut Buffer,
     ) {
+        let palette = product_palette::current();
         let focused = self.focus_side == FocusSide::Models;
-        let border_style = if focused {
-            Style::default().fg(Color::Yellow)
+        let border_style = Style::default().fg(if focused {
+            palette.border_focused
         } else {
-            Style::default().fg(Color::DarkGray)
-        };
+            palette.border_muted
+        });
 
         // 标题行：显示模型数量或搜索提示
         let title = if !self.search_query.is_empty() {
             Span::styled(
                 format!("模型  / {}", self.search_query),
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(palette.accent_bright)
                     .add_modifier(Modifier::BOLD),
             )
         } else if self.is_searching {
             Span::styled(
                 "模型  / 输入关键词…",
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(palette.border_muted),
             )
         } else {
             Span::styled("模型", Style::default().add_modifier(Modifier::BOLD))
@@ -509,10 +589,35 @@ impl RelayModelPicker {
 
         if filtered.is_empty() {
             let msg = "（无匹配模型）";
-            let p = Paragraph::new(msg).style(Style::default().fg(Color::DarkGray));
+            let p = Paragraph::new(msg).style(Style::default().fg(palette.border_muted));
             ratatui::widgets::Widget::render(p, inner_area, buf);
             return;
         }
+
+        let detail_area = if inner_area.height > DETAIL_HEIGHT + 2 {
+            let model_height = inner_area.height.saturating_sub(DETAIL_HEIGHT);
+            let detail_y = inner_area.y + model_height;
+            Some(Rect::new(
+                inner_area.x,
+                detail_y,
+                inner_area.width,
+                DETAIL_HEIGHT,
+            ))
+        } else {
+            None
+        };
+        let list_area = if let Some(detail_area) = detail_area {
+            Rect::new(
+                inner_area.x,
+                inner_area.y,
+                inner_area.width,
+                detail_area.y.saturating_sub(inner_area.y),
+            )
+        } else {
+            inner_area
+        };
+        self.visible_model_cards
+            .set(((list_area.height as usize) / CARD_HEIGHT).max(1));
 
         // 名称列可用宽度（扣去前导空格 2 列）。
         let name_max = (inner_area.width as usize).saturating_sub(2);
@@ -520,8 +625,8 @@ impl RelayModelPicker {
         let scroll_top = self.model_scroll.scroll_top;
         let sel_idx = self.model_scroll.selected_idx.unwrap_or(0);
 
-        let mut y = inner_area.y;
-        let y_max = inner_area.y + inner_area.height;
+        let mut y = list_area.y;
+        let y_max = list_area.y + list_area.height;
 
         for (i, model) in filtered.iter().enumerate().skip(scroll_top) {
             if y >= y_max {
@@ -533,7 +638,9 @@ impl RelayModelPicker {
 
             // 高亮背景覆盖整张卡片。
             let card_bg = if is_selected && focused {
-                Style::default().bg(Color::DarkGray)
+                Style::default()
+                    .bg(palette.selection_background)
+                    .fg(palette.selection_foreground)
             } else {
                 Style::default()
             };
@@ -542,7 +649,7 @@ impl RelayModelPicker {
                 if y >= y_max {
                     break;
                 }
-                let line_area = Rect::new(inner_area.x, y, inner_area.width, 1);
+                let line_area = Rect::new(list_area.x, y, list_area.width, 1);
                 // 先填背景色
                 if is_selected && focused {
                     for x in line_area.x..line_area.x + line_area.width {
@@ -551,10 +658,34 @@ impl RelayModelPicker {
                         }
                     }
                 }
-                let para = Paragraph::new(line);
+                let para = Paragraph::new(line).style(card_bg);
                 ratatui::widgets::Widget::render(para, line_area, buf);
                 y += 1;
             }
+        }
+
+        if let Some(detail_area) = detail_area
+            && let Some(model) = filtered.get(sel_idx)
+        {
+            let separator_area = Rect::new(detail_area.x, detail_area.y, detail_area.width, 1);
+            for x in separator_area.x..separator_area.x + separator_area.width {
+                if let Some(cell) = buf.cell_mut((x, separator_area.y)) {
+                    cell.set_symbol("─");
+                    cell.set_style(Style::default().fg(palette.border_muted));
+                }
+            }
+            let detail = Self::detail_line(
+                pricing.effective_price(model, group_name),
+                &pricing.display,
+                detail_area.width as usize,
+            );
+            let detail_text_area = Rect::new(
+                detail_area.x,
+                detail_area.y + 1,
+                detail_area.width,
+                detail_area.height.saturating_sub(1),
+            );
+            ratatui::widgets::Widget::render(Paragraph::new(detail), detail_text_area, buf);
         }
     }
 }
@@ -572,9 +703,15 @@ impl Renderable for RelayModelPicker {
         }
     }
 
-    fn desired_height(&self, _width: u16) -> u16 {
-        // 作为弹层视图，高度由 BottomPane 的区域决定；此处返回一个合理的最小值。
-        20
+    fn desired_height(&self, width: u16) -> u16 {
+        match self.state {
+            RelayPickerState::Loading => 5,
+            RelayPickerState::Error { .. } => 7,
+            RelayPickerState::Ready { .. } => match LayoutMode::from_width(width) {
+                LayoutMode::Wide | LayoutMode::Medium => READY_HEIGHT_WIDE,
+                LayoutMode::Narrow => READY_HEIGHT_NARROW,
+            },
+        }
     }
 }
 
@@ -659,7 +796,7 @@ impl BottomPaneView for RelayModelPicker {
                 FocusSide::Models => {
                     if n_models > 0 {
                         self.model_scroll.move_up_wrap(n_models);
-                        let visible_cards = (20 / CARD_HEIGHT).max(1);
+                        let visible_cards = self.visible_model_cards.get();
                         self.model_scroll.ensure_visible(n_models, visible_cards);
                     }
                 }
@@ -673,7 +810,7 @@ impl BottomPaneView for RelayModelPicker {
                 FocusSide::Models => {
                     if n_models > 0 {
                         self.model_scroll.move_down_wrap(n_models);
-                        let visible_cards = (20 / CARD_HEIGHT).max(1);
+                        let visible_cards = self.visible_model_cards.get();
                         self.model_scroll.ensure_visible(n_models, visible_cards);
                     }
                 }
@@ -737,13 +874,17 @@ impl BottomPaneView for RelayModelPicker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_login::{EffectivePrice, PricingDisplay, PricingModel};
     use codex_login::RelayPricing;
+    use codex_login::{EffectivePrice, PricingDisplay, PricingModel};
     use std::collections::HashMap;
 
     // --- 辅助构造器 ---
 
-    fn make_pricing(groups: &[&str], model_name: &str, group_prices: &[(&str, f64, f64)]) -> RelayPricing {
+    fn make_pricing(
+        groups: &[&str],
+        model_name: &str,
+        group_prices: &[(&str, f64, f64)],
+    ) -> RelayPricing {
         let mut group_ratio: HashMap<String, f64> = HashMap::new();
         let mut usable_group: HashMap<String, String> = HashMap::new();
         for g in groups {
@@ -752,13 +893,16 @@ mod tests {
         }
         let mut effective_prices: HashMap<String, EffectivePrice> = HashMap::new();
         for (g, inp, out) in group_prices {
-            effective_prices.insert(g.to_string(), EffectivePrice {
-                input: Some(*inp),
-                output: Some(*out),
-                basis: "per_million_tokens".to_string(),
-                currency_symbol: "¥".to_string(),
-                ..Default::default()
-            });
+            effective_prices.insert(
+                g.to_string(),
+                EffectivePrice {
+                    input: Some(*inp),
+                    output: Some(*out),
+                    basis: "per_million_tokens".to_string(),
+                    currency_symbol: "¥".to_string(),
+                    ..Default::default()
+                },
+            );
         }
         let model = PricingModel {
             model_name: model_name.to_string(),
@@ -825,7 +969,10 @@ mod tests {
     #[test]
     fn truncate_long_name_middle_dots() {
         let result = RelayModelPicker::truncate_middle("gpt-4o-mini-2024-07-18", 12);
-        assert!(result.contains("..."), "expected middle truncation, got: {result}");
+        assert!(
+            result.contains("..."),
+            "expected middle truncation, got: {result}"
+        );
         assert!(result.len() <= 12, "result too long: {result}");
         // head and tail preserved
         assert!(result.starts_with("gpt"), "head not preserved: {result}");
@@ -837,20 +984,38 @@ mod tests {
         assert_eq!(result.chars().count(), 3);
     }
 
+    #[test]
+    fn picker_height_stays_compact() {
+        let pricing = make_pricing(&["default"], "gpt-test", &[("default", 0.2, 1.6)]);
+        let picker = make_picker(pricing);
+
+        assert_eq!(picker.desired_height(100), READY_HEIGHT_WIDE);
+        assert_eq!(picker.desired_height(60), READY_HEIGHT_NARROW);
+        assert!(picker.desired_height(100) < 20);
+    }
+
+    #[test]
+    fn missing_price_has_no_currency_prefix() {
+        assert_eq!(RelayModelPicker::format_price(None, "$"), "—");
+        assert_eq!(RelayModelPicker::format_price(Some(0.0), "$"), "$0");
+    }
+
     // --- Loading 状态不渲染"无匹配" ---
 
     #[test]
     fn loading_state_does_not_contain_no_match_text() {
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
         let backend = TestBackend::new(80, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let picker = RelayModelPicker::new(RelayPickerState::Loading, dummy_tx());
 
-        terminal.draw(|frame| {
-            picker.render(frame.area(), frame.buffer_mut());
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                picker.render(frame.area(), frame.buffer_mut());
+            })
+            .unwrap();
 
         let rendered = terminal.backend().to_string();
         assert!(
@@ -939,12 +1104,15 @@ mod tests {
         assert!(
             state.scroll_top <= sel,
             "scroll_top({}) > selected({})",
-            state.scroll_top, sel
+            state.scroll_top,
+            sel
         );
         assert!(
             sel < state.scroll_top + visible_cards,
             "selected({}) not visible, scroll_top={}, visible={}",
-            sel, state.scroll_top, visible_cards
+            sel,
+            state.scroll_top,
+            visible_cards
         );
     }
 
@@ -976,34 +1144,41 @@ mod tests {
 
     #[test]
     fn ready_state_renders_without_panic() {
-        use ratatui::backend::TestBackend;
         use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
 
-        let pricing = make_pricing(&["vip", "default"], "gpt-test", &[
-            ("vip", 0.2, 1.6),
-            ("default", 0.4, 3.2),
-        ]);
+        let pricing = make_pricing(
+            &["vip", "default"],
+            "gpt-test",
+            &[("vip", 0.2, 1.6), ("default", 0.4, 3.2)],
+        );
         let picker = make_picker(pricing);
 
         // Wide layout (96 cols)
         let backend = TestBackend::new(100, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            picker.render(frame.area(), frame.buffer_mut());
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                picker.render(frame.area(), frame.buffer_mut());
+            })
+            .unwrap();
 
         // Medium layout (80 cols)
         let backend2 = TestBackend::new(80, 20);
         let mut terminal2 = Terminal::new(backend2).unwrap();
-        terminal2.draw(|frame| {
-            picker.render(frame.area(), frame.buffer_mut());
-        }).unwrap();
+        terminal2
+            .draw(|frame| {
+                picker.render(frame.area(), frame.buffer_mut());
+            })
+            .unwrap();
 
         // Narrow layout (60 cols)
         let backend3 = TestBackend::new(60, 20);
         let mut terminal3 = Terminal::new(backend3).unwrap();
-        terminal3.draw(|frame| {
-            picker.render(frame.area(), frame.buffer_mut());
-        }).unwrap();
+        terminal3
+            .draw(|frame| {
+                picker.render(frame.area(), frame.buffer_mut());
+            })
+            .unwrap();
     }
 }

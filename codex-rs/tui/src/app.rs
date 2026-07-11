@@ -235,7 +235,7 @@ use self::side::SideThreadState;
 use self::startup_prompts::*;
 use self::thread_events::*;
 
-const EXTERNAL_EDITOR_HINT: &str = "Save and close external editor to continue.";
+const EXTERNAL_EDITOR_HINT: &str = "保存并关闭外部编辑器以继续。";
 const THREAD_EVENT_CHANNEL_CAPACITY: usize = 32768;
 
 enum ThreadInteractiveRequest {
@@ -688,7 +688,7 @@ fn session_start_error(
     }
 
     let target_label = target_session.display_label();
-    color_eyre::eyre::eyre!("Failed to {action} session from {target_label}: {err}")
+    color_eyre::eyre::eyre!("从 {target_label} {action}会话失败：{err}")
 }
 
 fn archived_session_guidance(err: &color_eyre::eyre::Report) -> Option<String> {
@@ -729,6 +729,16 @@ impl App {
         cfg: crate::legacy_core::config::Config,
         initial_user_message: Option<crate::chatwidget::UserMessage>,
     ) -> crate::chatwidget::ChatWidgetInit {
+        self.chatwidget_init_for_thread(tui, cfg, initial_user_message, false)
+    }
+
+    pub fn chatwidget_init_for_thread(
+        &self,
+        tui: &mut tui::Tui,
+        cfg: crate::legacy_core::config::Config,
+        initial_user_message: Option<crate::chatwidget::UserMessage>,
+        show_welcome: bool,
+    ) -> crate::chatwidget::ChatWidgetInit {
         crate::chatwidget::ChatWidgetInit {
             config: cfg,
             frame_requester: tui.frame_requester(),
@@ -740,7 +750,7 @@ impl App {
             has_codex_backend_auth: self.chat_widget.has_codex_backend_auth(),
             model_catalog: self.model_catalog.clone(),
             feedback: self.feedback.clone(),
-            is_first_run: false,
+            is_first_run: show_welcome,
             status_account_display: self.chat_widget.status_account_display().cloned(),
             runtime_model_provider_base_url: self
                 .chat_widget
@@ -909,7 +919,7 @@ impl App {
                     has_codex_backend_auth,
                     model_catalog: model_catalog.clone(),
                     feedback: feedback.clone(),
-                    is_first_run,
+                    is_first_run: true, // 每次 StartFresh 都展示 NAICODE 欢迎首屏
                     status_account_display: status_account_display.clone(),
                     runtime_model_provider_base_url: runtime_model_provider_base_url.clone(),
                     initial_plan_type,
@@ -928,7 +938,7 @@ impl App {
                 let resumed = app_server
                     .resume_thread(config.clone(), target_session.thread_id)
                     .await
-                    .map_err(|err| session_start_error("resume", &target_session, err))?;
+                    .map_err(|err| session_start_error("恢复", &target_session, err))?;
                 let init = crate::chatwidget::ChatWidgetInit {
                     config: config.clone(),
                     frame_requester: tui.frame_requester(),
@@ -967,7 +977,7 @@ impl App {
                 let forked = app_server
                     .fork_thread(config.clone(), target_session.thread_id)
                     .await
-                    .map_err(|err| session_start_error("fork", &target_session, err))?;
+                    .map_err(|err| session_start_error("派生", &target_session, err))?;
                 let init = crate::chatwidget::ChatWidgetInit {
                     config: config.clone(),
                     frame_requester: tui.frame_requester(),
@@ -1006,9 +1016,9 @@ impl App {
         let file_search = FileSearchManager::new(config.cwd.to_path_buf(), app_event_tx.clone());
         let runtime_keymap = RuntimeKeymap::from_config(&config.tui_keymap).map_err(|err| {
             color_eyre::eyre::eyre!(
-                "Invalid `tui.keymap` configuration: {err}\n\
-Fix the config and retry.\n\
-See the Codex keymap documentation for supported actions and examples."
+                "`tui.keymap` 配置无效：{err}\n\
+请修正配置后重试。\n\
+支持的操作和示例请参阅 Codex 键位映射文档。"
             )
         })?;
         #[cfg(not(debug_assertions))]
