@@ -1,6 +1,7 @@
 //! Session headers, onboarding guidance, and transcript cards.
 
 use super::*;
+use crate::product_palette;
 
 pub(crate) const SESSION_HEADER_MAX_INNER_WIDTH: usize = 56; // Just an eyeballed value
 
@@ -102,7 +103,7 @@ impl HistoryCell for TooltipHistoryCell {
             .max(1);
         let mut lines: Vec<Line<'static>> = Vec::new();
         append_markdown(
-            &format!("**Tip:** {}", self.tip),
+            &format!("**提示：** {}", self.tip),
             Some(wrap_width),
             Some(self.cwd.as_path()),
             &mut lines,
@@ -112,7 +113,7 @@ impl HistoryCell for TooltipHistoryCell {
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
-        vec![Line::from(format!("Tip: {}", self.tip))]
+        vec![Line::from(format!("提示: {}", self.tip))]
     }
 }
 
@@ -146,56 +147,60 @@ pub(crate) fn new_session_info(
     auth_plan: Option<PlanType>,
     show_fast_status: bool,
 ) -> SessionInfoCell {
-    // Header box rendered as history (so it appears at the very top)
-    let header = SessionHeaderHistoryCell::new(
-        session.model.clone(),
-        session.reasoning_effort.clone(),
-        show_fast_status,
-        config.cwd.to_path_buf(),
-        CODEX_CLI_VERSION,
-    )
-    .with_yolo_mode(has_yolo_permissions(
-        session.approval_policy,
-        &session.permission_profile,
-    ));
-    let mut parts: Vec<Box<dyn HistoryCell>> = vec![Box::new(header)];
+    let mut parts: Vec<Box<dyn HistoryCell>> = Vec::new();
 
     if is_first_event {
+        // Full Logo header box — only for fresh sessions. /clear, resume, fork, and
+        // replay skip the Logo entirely and rely on the compact session summary that
+        // the caller appends separately.
+        let header = SessionHeaderHistoryCell::new(
+            session.model.clone(),
+            session.reasoning_effort.clone(),
+            show_fast_status,
+            config.cwd.to_path_buf(),
+            CODEX_CLI_VERSION,
+        )
+        .with_yolo_mode(has_yolo_permissions(
+            session.approval_policy,
+            &session.permission_profile,
+        ));
+        parts.push(Box::new(header));
+
         // Help lines below the header (new copy and list)
         let help_lines: Vec<Line<'static>> = vec![
-            "  To get started, describe a task or try one of these commands:"
-                .dim()
-                .into(),
+            "  开始前，请描述任务或尝试以下命令之一：".dim().into(),
             Line::from(""),
             Line::from(vec![
                 "  ".into(),
                 "/init".into(),
-                " - create an AGENTS.md file with instructions for Codex".dim(),
+                " - 创建包含 naicode 使用说明的 AGENTS.md 文件".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),
                 "/status".into(),
-                " - show current session configuration".dim(),
+                " - 显示当前会话配置".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),
                 "/permissions".into(),
-                " - choose what Codex is allowed to do".dim(),
+                " - 选择允许 naicode 执行的操作".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),
                 "/model".into(),
-                " - choose what model and reasoning effort to use".dim(),
+                " - 选择使用的模型和推理强度".dim(),
             ]),
             Line::from(vec![
                 "  ".into(),
                 "/review".into(),
-                " - review any changes and find issues".dim(),
+                " - 审查改动并发现问题".dim(),
             ]),
         ];
 
         parts.push(Box::new(PlainHistoryCell { lines: help_lines }));
     } else {
+        // No Logo for /clear, resume, fork, or replay. Only show tooltips or a
+        // model-change notice when relevant.
         if config.show_tooltips
             && let Some(tooltips) = tooltip_override
                 .or_else(|| tooltips::get_tooltip(auth_plan, show_fast_status))
@@ -205,9 +210,9 @@ pub(crate) fn new_session_info(
         }
         if requested_model != session.model.as_str() {
             let lines = vec![
-                "model changed:".magenta().bold().into(),
-                format!("requested: {requested_model}").into(),
-                format!("used: {}", session.model).into(),
+                "模型已更改：".magenta().bold().into(),
+                format!("请求的模型：{requested_model}").into(),
+                format!("实际使用：{}", session.model).into(),
             ];
             parts.push(Box::new(PlainHistoryCell { lines }));
         }
@@ -332,16 +337,21 @@ impl HistoryCell for SessionHeaderHistoryCell {
 
         let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
 
-        // Title line rendered inside the box: ">_ naicode (vX)"
+        // Static NAICODE symbol logo. Keeping this in the first history cell lets it
+        // naturally scroll away and avoids introducing a persistent top bar.
+        let palette = product_palette::current();
+        let logo_style = Style::default().fg(palette.accent).bold();
+        let brand_style = Style::default().fg(palette.accent_bright).bold();
         let title_spans: Vec<Span<'static>> = vec![
-            Span::from(">_ ").dim(),
-            Span::from("naicode").bold(),
+            Span::styled("▰▰ NAICODE ▰▰", logo_style),
+            Span::from("  "),
+            Span::styled("酸奶中转站", brand_style),
             Span::from(" ").dim(),
-            Span::from(format!("(v{})", self.version)).dim(),
+            Span::from(format!("v{}", self.version)).dim(),
         ];
 
         const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
-        const CHANGE_MODEL_HINT_EXPLANATION: &str = " to change";
+        const CHANGE_MODEL_HINT_EXPLANATION: &str = " 切换";
         const DIR_LABEL: &str = "directory:";
         const PERMISSIONS_LABEL: &str = "permissions:";
         let label_width = if self.yolo_mode {
@@ -370,7 +380,10 @@ impl HistoryCell for SessionHeaderHistoryCell {
                 spans.push(Span::styled("fast", self.model_style.magenta()));
             }
             spans.push("   ".dim());
-            spans.push(CHANGE_MODEL_HINT_COMMAND.cyan());
+            spans.push(Span::styled(
+                CHANGE_MODEL_HINT_COMMAND,
+                Style::default().fg(palette.accent),
+            ));
             spans.push(CHANGE_MODEL_HINT_EXPLANATION.dim());
             spans
         };
@@ -393,7 +406,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
             let permissions_label = format!("{PERMISSIONS_LABEL:<label_width$}");
             lines.push(make_row(vec![
                 Span::from(format!("{permissions_label} ")).dim(),
-                "YOLO mode".magenta().bold(),
+                "YOLO 模式".magenta().bold(),
             ]));
         }
 
@@ -416,7 +429,7 @@ impl HistoryCell for SessionHeaderHistoryCell {
             )),
         ];
         if self.yolo_mode {
-            lines.push(Line::from("permissions: YOLO mode"));
+            lines.push(Line::from("permissions: YOLO 模式"));
         }
         lines
     }

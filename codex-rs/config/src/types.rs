@@ -742,6 +742,13 @@ pub struct Tui {
     #[serde(default)]
     pub theme: Option<String>,
 
+    /// Product UI accent color as `#RRGGBB`.
+    ///
+    /// This is independent from `theme`, which only controls syntax highlighting.
+    #[serde(default)]
+    #[schemars(regex(pattern = r"^#[0-9A-Fa-f]{6}$"))]
+    pub product_accent: Option<String>,
+
     /// Pet id to preselect in the terminal pet picker.
     ///
     /// Custom pet ids resolve against CODEX_HOME/pets/<pet-id>/pet.json.

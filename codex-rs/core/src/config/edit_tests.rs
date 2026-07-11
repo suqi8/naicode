@@ -14,6 +14,19 @@ use tempfile::tempdir;
 use toml::Value as TomlValue;
 
 #[test]
+fn product_accent_edit_writes_tui_product_accent() {
+    let tmp = tempdir().expect("tmpdir");
+
+    ConfigEditsBuilder::new(tmp.path())
+        .set_product_accent("#279CFF")
+        .apply_blocking()
+        .expect("persist");
+
+    let contents = std::fs::read_to_string(tmp.path().join(CONFIG_TOML_FILE)).expect("read config");
+    assert_eq!(contents, "[tui]\nproduct_accent = \"#279CFF\"\n");
+}
+
+#[test]
 fn blocking_set_model_top_level() {
     let tmp = tempdir().expect("tmpdir");
     let codex_home = tmp.path();

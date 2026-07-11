@@ -827,6 +827,7 @@ fn config_toml_deserializes_model_availability_nux() {
             status_line_use_colors: true,
             terminal_title: None,
             theme: None,
+            product_accent: None,
             pet: None,
             pet_anchor: TuiPetAnchor::Composer,
             session_picker_view: None,
@@ -3556,6 +3557,19 @@ fn tui_theme_defaults_to_none() {
 }
 
 #[test]
+fn tui_product_accent_deserializes_independently_from_syntax_theme() {
+    let cfg = r##"
+[tui]
+theme = "dracula"
+product_accent = "#279CFF"
+"##;
+    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
+    let tui = parsed.tui.as_ref().expect("tui config");
+    assert_eq!(tui.theme.as_deref(), Some("dracula"));
+    assert_eq!(tui.product_accent.as_deref(), Some("#279CFF"));
+}
+
+#[test]
 fn tui_session_picker_view_deserializes_from_toml() {
     let cfg = r#"
 [tui]
@@ -3666,6 +3680,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
             status_line_use_colors: true,
             terminal_title: None,
             theme: None,
+            product_accent: None,
             pet: None,
             pet_anchor: TuiPetAnchor::Composer,
             session_picker_view: None,

@@ -90,6 +90,14 @@ pub fn syntax_theme_edit(name: &str) -> ConfigEdit {
     }
 }
 
+/// Produces a config edit that sets `[tui].product_accent = "#RRGGBB"`.
+pub fn product_accent_edit(accent: &str) -> ConfigEdit {
+    ConfigEdit::SetPath {
+        segments: vec!["tui".to_string(), "product_accent".to_string()],
+        value: value(accent.to_string()),
+    }
+}
+
 /// Produces a config edit that sets [tui].pet = "<name>".
 pub fn tui_pet_edit(name: &str) -> ConfigEdit {
     ConfigEdit::SetPath {
@@ -959,6 +967,11 @@ impl ConfigEditsBuilder {
             segments: vec!["tui".to_string(), "session_picker_view".to_string()],
             value: value(mode.to_string()),
         });
+        self
+    }
+
+    pub fn set_product_accent(mut self, accent: &str) -> Self {
+        self.edits.push(product_accent_edit(accent));
         self
     }
 
