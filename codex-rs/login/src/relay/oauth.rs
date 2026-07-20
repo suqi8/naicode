@@ -22,9 +22,11 @@ use serde::Deserialize;
 use sha2::Digest;
 use std::path::Path;
 use std::time::Duration;
+use std::time::Instant;
 
 /// 等待用户在浏览器完成授权的最长时间。
 const OAUTH_TIMEOUT: Duration = Duration::from_secs(300);
+const MAX_CALLBACK_URL_BYTES: usize = 4096;
 
 /// OAuth 登录错误。
 #[derive(Debug, thiserror::Error)]
@@ -86,13 +88,76 @@ fn generate_pkce() -> (String, String) {
     (verifier, challenge)
 }
 
-/// 从回调请求的查询串里取参数。
-fn query_param(url_raw: &str, key: &str) -> Option<String> {
-    let parsed = url::Url::parse(&format!("http://127.0.0.1{url_raw}")).ok()?;
-    parsed
-        .query_pairs()
-        .find(|(k, _)| k == key)
-        .map(|(_, v)| v.into_owned())
+#[derive(Debug, PartialEq, Eq)]
+enum ParsedCallback {
+    Authorized {
+        code: String,
+        group: String,
+        model: String,
+    },
+    Denied(String),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CallbackValidationError {
+    NotCallback,
+    Invalid,
+    StateMismatch,
+}
+
+fn assign_unique(slot: &mut Option<String>, value: String) -> bool {
+    if slot.is_some() {
+        return false;
+    }
+    *slot = Some(value);
+    true
+}
+
+/// 解析并验证浏览器回调。state 必须先通过，之后才接受 code 或 error。
+fn parse_callback_url(
+    url_raw: &str,
+    expected_state: &str,
+) -> Result<ParsedCallback, CallbackValidationError> {
+    if url_raw.len() > MAX_CALLBACK_URL_BYTES {
+        return Err(CallbackValidationError::Invalid);
+    }
+    let parsed = url::Url::parse(&format!("http://127.0.0.1{url_raw}"))
+        .map_err(|_| CallbackValidationError::Invalid)?;
+    if parsed.path() != "/callback" {
+        return Err(CallbackValidationError::NotCallback);
+    }
+
+    let mut code = None;
+    let mut error = None;
+    let mut state = None;
+    let mut group = None;
+    let mut model = None;
+    for (key, value) in parsed.query_pairs() {
+        let slot = match key.as_ref() {
+            "code" => &mut code,
+            "error" => &mut error,
+            "state" => &mut state,
+            "group" => &mut group,
+            "model" => &mut model,
+            _ => continue,
+        };
+        if !assign_unique(slot, value.into_owned()) {
+            return Err(CallbackValidationError::Invalid);
+        }
+    }
+
+    if state.as_deref() != Some(expected_state) {
+        return Err(CallbackValidationError::StateMismatch);
+    }
+    match (code, error) {
+        (Some(code), None) if !code.is_empty() => Ok(ParsedCallback::Authorized {
+            code,
+            group: group.unwrap_or_default(),
+            model: model.unwrap_or_default(),
+        }),
+        (None, Some(error)) if !error.is_empty() => Ok(ParsedCallback::Denied(error)),
+        _ => Err(CallbackValidationError::Invalid),
+    }
 }
 
 /// 用一次性授权码 + PKCE verifier 向中转站换取 OAuth token pair。
@@ -103,6 +168,7 @@ fn exchange_code(
 ) -> Result<RelayOAuthTokenResponse, RelayOAuthError> {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| RelayOAuthError::Exchange(e.to_string()))?;
     let resp = client
@@ -128,8 +194,18 @@ fn exchange_code(
             .unwrap_or("换取 OAuth 凭据失败");
         return Err(RelayOAuthError::Exchange(msg.to_string()));
     }
-    serde_json::from_slice::<RelayOAuthTokenResponse>(&bytes)
-        .map_err(|e| RelayOAuthError::Exchange(format!("OAuth 响应无效: {e}")))
+    let token = serde_json::from_slice::<RelayOAuthTokenResponse>(&bytes)
+        .map_err(|e| RelayOAuthError::Exchange(format!("OAuth 响应无效: {e}")))?;
+    if token.access_token.trim().is_empty()
+        || token.refresh_token.trim().is_empty()
+        || token.session_id.trim().is_empty()
+        || token.expires_in <= 0
+    {
+        return Err(RelayOAuthError::Exchange(
+            "OAuth 响应缺少有效凭据".to_string(),
+        ));
+    }
+    Ok(token)
 }
 
 /// 运行一次浏览器 OAuth 登录，阻塞直到完成或超时。
@@ -223,55 +299,54 @@ fn wait_for_callback(
     server: &tiny_http::Server,
     expected_state: &str,
 ) -> Result<(String, String, String), RelayOAuthError> {
+    let deadline = Instant::now() + OAUTH_TIMEOUT;
     loop {
-        let request = match server.recv_timeout(OAUTH_TIMEOUT) {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(RelayOAuthError::Timeout);
+        }
+        let request = match server.recv_timeout(remaining) {
             Ok(Some(req)) => req,
             Ok(None) => return Err(RelayOAuthError::Timeout),
             Err(e) => return Err(RelayOAuthError::Bind(e.to_string())),
         };
-        let url_raw = request.url().to_string();
-
-        // 只认 /callback；其余路径回 404 继续等。
-        if !url_raw.starts_with("/callback") {
-            let _ = request
-                .respond(tiny_http::Response::from_string("Not Found").with_status_code(404));
+        if request.method() != &tiny_http::Method::Get {
+            respond_html(request, "请求无效", "本地回调只接受 GET 请求。", 405);
             continue;
         }
+        let url_raw = request.url().to_string();
 
-        // 授权被拒绝。
-        if let Some(err) = query_param(&url_raw, "error") {
-            respond_html(request, "授权失败", "你可以关闭本页并回到终端。");
-            return Err(RelayOAuthError::Denied(err));
-        }
-
-        let state = query_param(&url_raw, "state").unwrap_or_default();
-        if state != expected_state {
-            respond_html(request, "校验失败", "state 不匹配，请重试。");
-            return Err(RelayOAuthError::StateMismatch);
-        }
-
-        let code = match query_param(&url_raw, "code") {
-            Some(c) if !c.is_empty() => c,
-            _ => {
-                respond_html(request, "缺少授权码", "请回到终端重试。");
-                return Err(RelayOAuthError::Denied("缺少授权码".to_string()));
+        match parse_callback_url(&url_raw, expected_state) {
+            Ok(ParsedCallback::Authorized { code, group, model }) => {
+                respond_html(
+                    request,
+                    "登录成功",
+                    "naicode 已连接到酸奶中转站，你可以关闭本页回到终端。",
+                    200,
+                );
+                return Ok((code, group, model));
             }
-        };
-        let group = query_param(&url_raw, "group").unwrap_or_default();
-        let model = query_param(&url_raw, "model").unwrap_or_default();
-
-        respond_html(
-            request,
-            "登录成功",
-            "naicode 已连接到酸奶中转站，你可以关闭本页回到终端。",
-        );
-        return Ok((code, group, model));
+            Ok(ParsedCallback::Denied(error)) => {
+                respond_html(request, "授权失败", "你可以关闭本页并回到终端。", 200);
+                return Err(RelayOAuthError::Denied(error));
+            }
+            Err(CallbackValidationError::NotCallback) => {
+                let _ = request
+                    .respond(tiny_http::Response::from_string("Not Found").with_status_code(404));
+            }
+            Err(CallbackValidationError::StateMismatch) => {
+                respond_html(request, "校验失败", "state 不匹配，请重新发起授权。", 400);
+            }
+            Err(CallbackValidationError::Invalid) => {
+                respond_html(request, "请求无效", "本地回调参数不完整或重复。", 400);
+            }
+        }
     }
 }
 
 /// 向浏览器返回与酸奶中转站授权页一致的简洁结果页。
 /// 保持白底、细边框、柔和暖色强调，不使用夸张插画/渐变或 AI 风格文案。
-fn respond_html(request: tiny_http::Request, title: &str, body: &str) {
+fn respond_html(request: tiny_http::Request, title: &str, body: &str, status_code: u16) {
     let success = title == "登录成功";
     let icon = if success { "✓" } else { "!" };
     let icon_class = if success { "success" } else { "error" };
@@ -308,11 +383,76 @@ p{{font-size:14px;line-height:1.65;color:var(--muted);margin:0}}
 </body>
 </html>"#
     );
-    let mut resp = tiny_http::Response::from_string(html);
+    let mut resp = tiny_http::Response::from_string(html).with_status_code(status_code);
     if let Ok(h) =
         tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/html; charset=utf-8"[..])
     {
         resp.add_header(h);
     }
     let _ = request.respond(resp);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn callback_requires_exact_path_and_matching_state() {
+        assert_eq!(
+            parse_callback_url("/callback?code=abc&state=expected", "expected"),
+            Ok(ParsedCallback::Authorized {
+                code: "abc".to_string(),
+                group: String::new(),
+                model: String::new(),
+            })
+        );
+        assert_eq!(
+            parse_callback_url("/callback-extra?code=abc&state=expected", "expected"),
+            Err(CallbackValidationError::NotCallback)
+        );
+        assert_eq!(
+            parse_callback_url("/callback?code=abc&state=wrong", "expected"),
+            Err(CallbackValidationError::StateMismatch)
+        );
+    }
+
+    #[test]
+    fn denial_is_only_accepted_after_state_validation() {
+        assert_eq!(
+            parse_callback_url("/callback?error=access_denied", "expected"),
+            Err(CallbackValidationError::StateMismatch)
+        );
+        assert_eq!(
+            parse_callback_url("/callback?error=access_denied&state=expected", "expected"),
+            Ok(ParsedCallback::Denied("access_denied".to_string()))
+        );
+    }
+
+    #[test]
+    fn callback_rejects_duplicate_or_ambiguous_parameters() {
+        for raw in [
+            "/callback?code=a&code=b&state=expected",
+            "/callback?code=a&error=access_denied&state=expected",
+            "/callback?code=a&state=expected&state=expected",
+        ] {
+            assert_eq!(
+                parse_callback_url(raw, "expected"),
+                Err(CallbackValidationError::Invalid),
+                "accepted invalid callback: {raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn pkce_values_use_base64url_without_padding() {
+        let (verifier, challenge) = generate_pkce();
+        for value in [&verifier, &challenge] {
+            assert_eq!(value.len(), 43);
+            assert!(
+                value
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+            );
+        }
+    }
 }
