@@ -294,6 +294,12 @@ pub fn auth_provider_from_auth(auth: &CodexAuth) -> SharedAuthProvider {
             account_id: auth.get_account_id(),
             is_fedramp_account: auth.is_fedramp_account(),
         }),
+        // Relay OAuth 只发送普通 Bearer，绝不伪造 ChatGPT-Account-ID / FedRAMP header。
+        CodexAuth::RelayOAuth(_) => Arc::new(BearerAuthProvider {
+            token: auth.get_token().ok(),
+            account_id: None,
+            is_fedramp_account: false,
+        }),
     }
 }
 

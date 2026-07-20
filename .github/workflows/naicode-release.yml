@@ -49,6 +49,10 @@ jobs:
           rustup target add x86_64-unknown-linux-musl
           mkdir -p ~/.cargo
           printf '[target.x86_64-unknown-linux-musl]\nlinker = "musl-gcc"\n' >> ~/.cargo/config.toml
+      - name: Setup rusty-v8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-unknown-linux-musl
       - name: Build
         working-directory: codex-rs
         run: |
@@ -83,6 +87,10 @@ jobs:
           rustup target add aarch64-unknown-linux-musl
           mkdir -p ~/.cargo
           printf '[target.aarch64-unknown-linux-musl]\nlinker = "musl-gcc"\n' >> ~/.cargo/config.toml
+      - name: Setup rusty-v8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: aarch64-unknown-linux-musl
       - name: Build
         working-directory: codex-rs
         run: |
@@ -113,6 +121,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+      - name: Setup rusty-v8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: aarch64-apple-darwin
       - name: Build
         working-directory: codex-rs
         run: |
@@ -142,6 +154,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin
+      - name: Setup rusty-v8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-apple-darwin
       - name: Build
         working-directory: codex-rs
         run: |

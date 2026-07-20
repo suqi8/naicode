@@ -287,6 +287,7 @@ impl ModelProvider for ConfiguredModelProvider {
                     CodexAuth::BedrockApiKey(_) => {
                         Err(ProviderAccountError::UnsupportedBedrockApiKeyAuth)
                     }
+                    CodexAuth::RelayOAuth(_) => Ok(ProviderAccount::ApiKey),
                     CodexAuth::Chatgpt(_)
                     | CodexAuth::ChatgptAuthTokens(_)
                     | CodexAuth::Headers(_)
