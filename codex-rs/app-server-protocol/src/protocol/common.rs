@@ -51,6 +51,11 @@ pub enum AuthMode {
     #[ts(rename = "bedrockApiKey")]
     #[strum(serialize = "bedrockApiKey")]
     BedrockApiKey,
+    /// 酸奶中转站 OAuth（短期 access + rotating refresh，由 naicode 管理）。
+    #[serde(rename = "relay_oauth_tokens")]
+    #[ts(rename = "relay_oauth_tokens")]
+    #[strum(serialize = "relay_oauth_tokens")]
+    RelayOAuthTokens,
 }
 
 impl AuthMode {
@@ -58,7 +63,11 @@ impl AuthMode {
     pub fn has_chatgpt_account(self) -> bool {
         match self {
             Self::Chatgpt | Self::ChatgptAuthTokens | Self::PersonalAccessToken => true,
-            Self::ApiKey | Self::Headers | Self::AgentIdentity | Self::BedrockApiKey => false,
+            Self::ApiKey
+            | Self::Headers
+            | Self::AgentIdentity
+            | Self::BedrockApiKey
+            | Self::RelayOAuthTokens => false,
         }
     }
 
@@ -70,7 +79,7 @@ impl AuthMode {
             | Self::Headers
             | Self::AgentIdentity
             | Self::PersonalAccessToken => true,
-            Self::ApiKey | Self::BedrockApiKey => false,
+            Self::ApiKey | Self::BedrockApiKey | Self::RelayOAuthTokens => false,
         }
     }
 }
