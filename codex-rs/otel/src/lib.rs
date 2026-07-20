@@ -56,7 +56,9 @@ pub enum TelemetryAuthMode {
 impl From<AuthMode> for TelemetryAuthMode {
     fn from(mode: AuthMode) -> Self {
         match mode {
-            AuthMode::ApiKey | AuthMode::BedrockApiKey => Self::ApiKey,
+            // Relay OAuth 直连模型 API，不是 Codex/ChatGPT 后端；遥测粗分类归入 ApiKey 域，
+            // 但真实 auth mode 仍由协议层保留为 RelayOAuthTokens。
+            AuthMode::ApiKey | AuthMode::BedrockApiKey | AuthMode::RelayOAuthTokens => Self::ApiKey,
             AuthMode::Chatgpt
             | AuthMode::ChatgptAuthTokens
             | AuthMode::Headers
