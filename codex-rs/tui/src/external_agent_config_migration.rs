@@ -42,10 +42,10 @@ enum ActionMenuOption {
 impl ActionMenuOption {
     fn label(self) -> &'static str {
         match self {
-            Self::Proceed => "Import selected",
-            Self::Customize => "Customize selection",
-            Self::Skip => "Cancel",
-            Self::Back => "Review selection",
+            Self::Proceed => "导入所选项",
+            Self::Customize => "自定义选择",
+            Self::Skip => "取消",
+            Self::Back => "查看所选项",
         }
     }
 }
@@ -309,7 +309,7 @@ impl ExternalAgentConfigMigrationScreen {
                     .len()
                     .saturating_sub(plugin_names.len());
                 if hidden_plugin_count > 0 {
-                    plugin_names.push(format!("+{hidden_plugin_count} more"));
+                    plugin_names.push(format!("另有 {hidden_plugin_count} 个"));
                 }
                 Line::from(format!(
                     "      • {}: {}",
@@ -321,7 +321,7 @@ impl ExternalAgentConfigMigrationScreen {
         let hidden_marketplace_count = plugin_groups.len().saturating_sub(lines.len());
         if hidden_marketplace_count > 0 {
             lines.push(Line::from(format!(
-                "      • +{hidden_marketplace_count} more marketplaces"
+                "      • 另有 {hidden_marketplace_count} 个市场"
             )));
         }
         lines
@@ -580,11 +580,8 @@ impl ExternalAgentConfigMigrationScreen {
 
     fn section_title(cwd: Option<&std::path::Path>) -> Line<'static> {
         match cwd {
-            Some(cwd) => Line::from(vec![
-                "Current project: ".bold(),
-                cwd.display().to_string().dim(),
-            ]),
-            None => Line::from("Home".bold()),
+            Some(cwd) => Line::from(vec!["当前项目：".bold(), cwd.display().to_string().dim()]),
+            None => Line::from("主目录".bold()),
         }
     }
 
@@ -626,9 +623,9 @@ impl ExternalAgentConfigMigrationScreen {
                         item_idx: None,
                         kind: RenderLineKind::ItemDetail,
                         line: Line::from(if count_summary.is_empty() {
-                            "      Importing: none".to_string()
+                            "      导入内容：无".to_string()
                         } else {
-                            format!("      Importing: {count_summary}")
+                            format!("      导入内容：{count_summary}")
                         }),
                     },
                 ]

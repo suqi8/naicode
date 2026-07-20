@@ -242,9 +242,7 @@ pub async fn relay_switch_group_remote_only(
     codex_home: &Path,
     new_group: &str,
 ) -> Result<(), RelayLoginError> {
-    if auth_manager.get_api_auth_mode()
-        == Some(codex_protocol::auth::AuthMode::RelayOAuthTokens)
-    {
+    if auth_manager.get_api_auth_mode() == Some(codex_protocol::auth::AuthMode::RelayOAuthTokens) {
         return relay_switch_group_with_manager(auth_manager, new_group).await;
     }
 

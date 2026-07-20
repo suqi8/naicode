@@ -127,14 +127,11 @@ impl HistoryCell for TokenActivityHistoryCell {
         let state = self.state.read().expect("token activity state poisoned");
         match &*state {
             TokenActivityState::Loading => {
-                vec![
-                    " Token activity".bold().into(),
-                    "   Loading...".dim().into(),
-                ]
+                vec![" Token 活动".bold().into(), "   加载中...".dim().into()]
             }
             TokenActivityState::Error => vec![
-                " Token activity".bold().into(),
-                "   Token activity unavailable".dim().into(),
+                " Token 活动".bold().into(),
+                "   Token 活动不可用".dim().into(),
             ],
             TokenActivityState::Loaded { response, today } => {
                 chart::loaded_lines(self.view, response, *today, width)

@@ -912,7 +912,8 @@ impl ProjectTrustContext {
         }
 
         let relative_dir = dir.as_path().strip_prefix(checkout_root.as_path()).ok()?;
-        Some(repo_root.join(relative_dir).join(".codex"))
+        // naicode: 与项目级配置目录保持一致，用 .naicode。
+        Some(repo_root.join(relative_dir).join(".naicode"))
     }
 }
 
@@ -1221,7 +1222,10 @@ async fn load_project_layers(
     let mut layers = Vec::new();
     let mut startup_warnings = Vec::new();
     for dir in dirs {
-        let dot_codex_abs = dir.join(".codex");
+        // naicode: 项目级配置目录用 .naicode（而非 .codex），既与本产品的
+        // CODEX_HOME=~/.naicode 一致（在家目录运行时会被去重跳过），也避免
+        // 误读旧的真·codex 的 ~/.codex 配置。
+        let dot_codex_abs = dir.join(".naicode");
         let dot_codex_uri = PathUri::from_abs_path(&dot_codex_abs);
         if !fs
             .get_metadata(&dot_codex_uri, /*sandbox*/ None)

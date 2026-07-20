@@ -19,17 +19,17 @@ pub(super) enum RateLimitResetScope {
 impl RateLimitResetScope {
     pub(super) fn picker_label(&self) -> &'static str {
         match self {
-            Self::Monthly => "Full reset (Monthly)",
-            Self::WeeklyAndFiveHour => "Full reset (Weekly + 5h)",
-            Self::Unknown => "Full reset",
+            Self::Monthly => "完整重置（每月）",
+            Self::WeeklyAndFiveHour => "完整重置（每周 + 5 小时）",
+            Self::Unknown => "完整重置",
         }
     }
 
     pub(super) fn usage_description(&self) -> &'static str {
         match self {
-            Self::Monthly => "Reset your current monthly usage limit.",
-            Self::WeeklyAndFiveHour => "Reset your current 5-hour and weekly usage limits.",
-            Self::Unknown => "Reset your current usage limits.",
+            Self::Monthly => "重置你当前的每月用量限额。",
+            Self::WeeklyAndFiveHour => "重置你当前的 5 小时和每周用量限额。",
+            Self::Unknown => "重置你当前的用量限额。",
         }
     }
 }
@@ -91,14 +91,14 @@ pub(super) fn reset_credit_options(
                 Some(expires_at) => DateTime::<Utc>::from_timestamp(expires_at, 0)
                     .map(|expires_at| {
                         format!(
-                            "Expires {}",
+                            "过期时间 {}",
                             expires_at
                                 .with_timezone(&Local)
                                 .format("%H:%M on %-d %b %Y")
                         )
                     })
-                    .unwrap_or_else(|| "Expiration unavailable".to_string()),
-                None => "Does not expire".to_string(),
+                    .unwrap_or_else(|| "过期时间不可用".to_string()),
+                None => "永不过期".to_string(),
             };
             let reset_label = credit
                 .title
@@ -120,7 +120,7 @@ pub(super) fn reset_credit_options(
     if options.is_empty() {
         options.push(ResetCreditOption {
             credit_id: None,
-            name: "Use a reset".to_string(),
+            name: "使用一次重置".to_string(),
             description: scope.usage_description().to_string(),
         });
     }

@@ -175,7 +175,7 @@ impl App {
         };
 
         self.chat_widget.add_info_message(
-            format!("Already viewing {}.", target_session.display_label()),
+            format!("已在查看 {}。", target_session.display_label()),
             /*hint*/ None,
         );
         true
@@ -422,7 +422,7 @@ impl App {
     ) -> Result<()> {
         let Some(thread_id) = self.active_thread_id else {
             self.chat_widget
-                .add_error_message("No active thread is available.".to_string());
+                .add_error_message("没有可用的活动线程。".to_string());
             return Ok(());
         };
 
@@ -457,7 +457,7 @@ impl App {
         }
 
         self.chat_widget
-            .add_error_message(format!("Not available in TUI yet for thread {thread_id}."));
+            .add_error_message(format!("线程 {thread_id} 暂不支持在 TUI 中执行此操作。"));
         Ok(())
     }
 
@@ -821,7 +821,7 @@ impl App {
             }
             Err(err) => {
                 self.chat_widget.add_error_message(format!(
-                    "Failed to resolve app-server request for thread {thread_id}: {err}"
+                    "处理线程 {thread_id} 的 app-server 请求失败：{err}"
                 ));
                 Ok(false)
             }
@@ -1549,15 +1549,13 @@ impl App {
             }
             if self.active_thread_id == Some(primary_thread_id) {
                 self.chat_widget.add_info_message(
-                    format!(
-                        "Agent thread {closed_thread_id} closed. Switched back to main thread."
-                    ),
+                    format!("Agent 线程 {closed_thread_id} 已关闭。已切换回主线程。"),
                     /*hint*/ None,
                 );
             } else {
                 self.clear_active_thread().await;
                 self.chat_widget.add_error_message(format!(
-                    "Agent thread {closed_thread_id} closed. Failed to switch back to main thread {primary_thread_id}.",
+                    "Agent 线程 {closed_thread_id} 已关闭。切换回主线程 {primary_thread_id} 失败。",
                 ));
             }
             return Ok(());

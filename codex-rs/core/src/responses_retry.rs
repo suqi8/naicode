@@ -6,6 +6,7 @@ use crate::client::ModelClientSession;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::util::backoff;
+use codex_protocol::auth::AuthMode;
 use codex_protocol::error::CodexErr;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::WarningEvent;
@@ -28,6 +29,24 @@ pub(crate) async fn handle_retryable_response_stream_error(
     turn_context: &TurnContext,
     request: ResponsesStreamRequest,
 ) -> Result<(), CodexErr> {
+    if is_relay_auth_stream_error(&err)
+        && let Some(auth_manager) = client_session.auth_manager()
+        && auth_manager.get_api_auth_mode() == Some(AuthMode::RelayOAuthTokens)
+    {
+        auth_manager
+            .refresh_token()
+            .await
+            .map_err(|error| match error {
+                codex_login::RefreshTokenError::Permanent(failed) => {
+                    CodexErr::RefreshTokenFailed(failed)
+                }
+                codex_login::RefreshTokenError::Transient(error) => CodexErr::Io(error),
+            })?;
+        client_session.reset_transport_after_auth_refresh();
+        *retries = 0;
+        return Ok(());
+    }
+
     if *retries >= max_retries
         && client_session.try_switch_fallback_transport(
             &turn_context.session_telemetry,
@@ -76,6 +95,15 @@ pub(crate) async fn handle_retryable_response_stream_error(
     }
 
     Err(err)
+}
+
+fn is_relay_auth_stream_error(err: &CodexErr) -> bool {
+    let message = err.to_string().to_ascii_lowercase();
+    message.contains("access token 已过期")
+        || message.contains("access token expired")
+        || message.contains("access_token_expired")
+        || message.contains("invalid token")
+        || message.contains("invalid_token")
 }
 
 fn log_retry(

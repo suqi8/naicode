@@ -32,8 +32,8 @@ impl ReasoningShortcutDirection {
     fn bound_message(self, effort: &ReasoningEffortConfig) -> String {
         let label = ChatWidget::reasoning_effort_sentence_label(effort);
         match self {
-            Self::Lower => format!("Reasoning is already at the lowest level ({label})."),
-            Self::Raise => format!("Reasoning is already at the highest level ({label})."),
+            Self::Lower => format!("推理强度已经处于最低级别（{label}）。"),
+            Self::Raise => format!("推理强度已经处于最高级别（{label}）。"),
         }
     }
 }
@@ -73,7 +73,7 @@ impl ChatWidget {
 
         if !self.is_session_configured() {
             self.add_info_message(
-                "Reasoning shortcuts are disabled until startup completes.".to_string(),
+                "推理强度快捷键在启动完成前不可用。".to_string(),
                 /*hint*/ None,
             );
             return true;
@@ -82,7 +82,7 @@ impl ChatWidget {
         let current_model = self.current_model().to_string();
         let Some(preset) = self.current_model_preset() else {
             self.add_info_message(
-                format!("Reasoning shortcuts are unavailable for {current_model}."),
+                format!("推理强度快捷键对 {current_model} 不可用。"),
                 /*hint*/ None,
             );
             return true;

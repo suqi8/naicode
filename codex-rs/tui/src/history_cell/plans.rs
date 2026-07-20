@@ -104,7 +104,7 @@ impl HistoryCell for ProposedPlanCell {
 
     fn display_hyperlink_lines(&self, width: u16) -> Vec<HyperlinkLine> {
         let mut lines = vec![
-            HyperlinkLine::new(vec!["• ".dim(), "Proposed Plan".bold()].into()),
+            HyperlinkLine::new(vec!["• ".dim(), "拟定计划".bold()].into()),
             HyperlinkLine::new(Line::from(" ")),
         ];
 
@@ -117,7 +117,7 @@ impl HistoryCell for ProposedPlanCell {
             Some(self.cwd.as_path()),
         );
         if body.is_empty() {
-            body.push(HyperlinkLine::new(Line::from("(empty)".dim().italic())));
+            body.push(HyperlinkLine::new(Line::from("（空）".dim().italic())));
         }
         plan_lines.extend(prefix_hyperlink_lines(body, "  ".into(), "  ".into()));
         plan_lines.push(HyperlinkLine::new(Line::from(" ")));
@@ -192,7 +192,7 @@ impl HistoryCell for PlanUpdateCell {
         };
 
         let mut lines: Vec<Line<'static>> = vec![];
-        lines.push(vec!["• ".dim(), "Updated Plan".bold()].into());
+        lines.push(vec!["• ".dim(), "更新计划".bold()].into());
 
         let mut indented_lines = vec![];
         let note = self
@@ -205,7 +205,7 @@ impl HistoryCell for PlanUpdateCell {
         };
 
         if self.plan.is_empty() {
-            indented_lines.push(Line::from("(no steps provided)".dim().italic()));
+            indented_lines.push(Line::from("（未提供步骤）".dim().italic()));
         } else {
             for PlanItemArg { step, status } in self.plan.iter() {
                 indented_lines.extend(render_step(status, step));
@@ -217,7 +217,7 @@ impl HistoryCell for PlanUpdateCell {
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
-        let mut lines = vec![Line::from("Updated Plan")];
+        let mut lines = vec![Line::from("更新计划")];
         if let Some(explanation) = self
             .explanation
             .as_ref()
@@ -227,7 +227,7 @@ impl HistoryCell for PlanUpdateCell {
             lines.extend(raw_lines_from_source(explanation));
         }
         if self.plan.is_empty() {
-            lines.push(Line::from("(no steps provided)"));
+            lines.push(Line::from("（未提供步骤）"));
         } else {
             for PlanItemArg { step, status } in &self.plan {
                 lines.push(Line::from(format!("{status:?}: {step}")));

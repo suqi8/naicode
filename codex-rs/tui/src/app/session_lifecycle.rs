@@ -90,7 +90,7 @@ impl App {
 
         if self.agent_navigation.is_empty() {
             self.chat_widget
-                .add_info_message("No agents available yet.".to_string(), /*hint*/ None);
+                .add_info_message("暂无可用的代理。".to_string(), /*hint*/ None);
             return;
         }
 
@@ -128,7 +128,7 @@ impl App {
             .collect();
 
         self.chat_widget.show_selection_view(SelectionViewParams {
-            title: Some("Subagents".to_string()),
+            title: Some("子代理".to_string()),
             subtitle: Some(AgentNavigationState::picker_subtitle()),
             footer_hint: Some(standard_popup_hint_line()),
             items,
@@ -360,7 +360,7 @@ impl App {
             .await
         {
             self.chat_widget
-                .add_error_message(format!("Agent thread {thread_id} is no longer available."));
+                .add_error_message(format!("代理线程 {thread_id} 已不可用。"));
             return Ok(());
         }
 
@@ -381,15 +381,14 @@ impl App {
                     }
                 }
                 Err(err) => {
-                    self.chat_widget.add_error_message(format!(
-                        "Failed to attach to agent thread {thread_id}: {err}"
-                    ));
+                    self.chat_widget
+                        .add_error_message(format!("无法连接到代理线程 {thread_id}：{err}"));
                     return Ok(());
                 }
             }
         } else if !self.thread_event_channels.contains_key(&thread_id) && is_replay_only {
             self.chat_widget
-                .add_error_message(format!("Agent thread {thread_id} is no longer available."));
+                .add_error_message(format!("代理线程 {thread_id} 已不可用。"));
             return Ok(());
         }
 
@@ -399,7 +398,7 @@ impl App {
         let Some((receiver, mut snapshot)) = self.activate_thread_for_replay(thread_id).await
         else {
             self.chat_widget
-                .add_error_message(format!("Agent thread {thread_id} is already active."));
+                .add_error_message(format!("代理线程 {thread_id} 已处于活动状态。"));
             if let Some(previous_thread_id) = previous_thread_id {
                 self.activate_thread_channel(previous_thread_id).await;
             }
@@ -572,19 +571,19 @@ impl App {
                         app_server,
                         started,
                         initial_user_message,
+                        /*show_welcome*/ session_start_source.is_none(),
                     )
                     .await
                 {
-                    self.chat_widget.add_error_message(format!(
-                        "Failed to attach to fresh app-server thread: {err}"
-                    ));
+                    self.chat_widget
+                        .add_error_message(format!("连接到新的 app-server 会话失败：{err}"));
                 } else if let Some(summary) = summary {
                     let mut lines: Vec<Line<'static>> = Vec::new();
                     if let Some(usage_line) = summary.usage_line {
                         lines.push(usage_line.into());
                     }
                     if let Some(command) = summary.resume_hint {
-                        let spans = vec!["To continue this session, run ".into(), command.cyan()];
+                        let spans = vec!["要继续此会话，请运行 ".into(), command.cyan()];
                         lines.push(spans.into());
                     }
                     self.chat_widget.add_plain_history_lines(lines);
@@ -606,15 +605,17 @@ impl App {
         app_server: &mut AppServerSession,
         started: AppServerStartedThread,
         initial_user_message: Option<crate::chatwidget::UserMessage>,
+        show_welcome: bool,
     ) -> Result<()> {
         // Initial messages are for freshly attached primary threads only. Thread switches and
         // resume/fork flows pass `None` so they cannot replay old history and then auto-submit a new
         // user turn by accident.
         self.reset_thread_event_state();
-        let init = self.chatwidget_init_for_forked_or_resumed_thread(
+        let init = self.chatwidget_init_for_thread(
             tui,
             self.config.clone(),
             initial_user_message,
+            show_welcome,
         );
         self.replace_chat_widget(ChatWidget::new_with_app_event(init));
         self.enqueue_primary_thread_session(started.session, started.turns)
@@ -774,9 +775,8 @@ impl App {
         {
             Ok(cfg) => cfg,
             Err(err) => {
-                self.chat_widget.add_error_message(format!(
-                    "Failed to rebuild configuration for resume: {err}"
-                ));
+                self.chat_widget
+                    .add_error_message(format!("为恢复会话重建配置失败：{err}"));
                 return Ok(AppRunControl::Continue);
             }
         };
@@ -805,6 +805,7 @@ impl App {
                 match self
                     .replace_chat_widget_with_app_server_thread(
                         tui, app_server, resumed, /*initial_user_message*/ None,
+                        /*show_welcome*/ false,
                     )
                     .await
                 {
@@ -815,8 +816,7 @@ impl App {
                                 lines.push(usage_line.into());
                             }
                             if let Some(command) = summary.resume_hint {
-                                let spans =
-                                    vec!["To continue this session, run ".into(), command.cyan()];
+                                let spans = vec!["要继续此会话，请运行 ".into(), command.cyan()];
                                 lines.push(spans.into());
                             }
                             self.chat_widget.add_plain_history_lines(lines);
@@ -829,16 +829,15 @@ impl App {
                     }
                     Err(err) => {
                         self.chat_widget.add_error_message(format!(
-                            "Failed to attach to resumed app-server thread: {err}"
+                            "连接到已恢复的 app-server 会话失败：{err}"
                         ));
                     }
                 }
             }
             Err(err) => {
                 let path_display = target_session.display_label();
-                self.chat_widget.add_error_message(format!(
-                    "Failed to resume session from {path_display}: {err}"
-                ));
+                self.chat_widget
+                    .add_error_message(format!("从 {path_display} 恢复会话失败：{err}"));
             }
         }
 

@@ -98,7 +98,7 @@ pub(crate) fn thread_to_transcript_cells(
                 };
                 if !text.trim().is_empty() {
                     cells.push(Arc::new(ReasoningSummaryCell::new(
-                        "Reasoning".to_string(),
+                        "推理".to_string(),
                         text,
                         cwd,
                         /*transcript_only*/ false,
@@ -114,7 +114,7 @@ pub(crate) fn thread_to_transcript_cells(
     }
     if cells.is_empty() {
         cells.push(Arc::new(PlainHistoryCell::new(vec![
-            "No transcript content available".italic().dim().into(),
+            "暂无可显示的会话记录内容".italic().dim().into(),
         ])));
     }
     cells

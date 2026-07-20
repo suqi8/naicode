@@ -3,9 +3,9 @@ source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 ╭─────────────────────────────────────────────────╮
-│ ✨ Update available! 0.0.0 -> 9.9.9             │
-│ Run pnpm add -g @openai/codex to update.        │
+│ ✨ 有可用更新！ 0.1.0 -> 9.9.9                  │
+│ 运行 pnpm add -g @openai/codex 进行更新。       │
 │                                                 │
-│ See full release notes:                         │
+│ 查看完整发行说明：                              │
 │ https://github.com/openai/codex/releases/latest │
 ╰─────────────────────────────────────────────────╯

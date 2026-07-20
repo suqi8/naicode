@@ -146,9 +146,7 @@ async fn run_startup_hooks_review_app(
                         )
                         .await
                         .map(|_| ())
-                        .map_err(|err| {
-                            format!("Failed to trust hooks: {}", format_config_error(&err))
-                        });
+                        .map_err(|err| format!("信任钩子失败：{}", format_config_error(&err)));
                         match result {
                             Ok(()) => return Ok(StartupHooksReviewOutcome::Continue),
                             Err(err) => {
@@ -207,27 +205,25 @@ fn selection_view_params(
 ) -> SelectionViewParams {
     let count = review_needed_count(entry);
     let count_line = match count {
-        1 => "1 hook is new or changed.".to_string(),
-        count => format!("{count} hooks are new or changed."),
+        1 => "有 1 个钩子是新增或已变更的。".to_string(),
+        count => format!("有 {count} 个钩子是新增或已变更的。"),
     };
     let mut header = ColumnRenderable::new();
-    header.push(Line::from("Hooks need review".bold()));
+    header.push(Line::from("钩子需要审查".bold()));
     header.push(Line::from(count_line).yellow());
-    header.push(Line::from(
-        "Hooks can run outside the sandbox after you trust them.".dim(),
-    ));
+    header.push(Line::from("信任钩子后，它们可以在沙箱之外运行。".dim()));
     if let Some(error) = trust_all_error {
         header.push(Paragraph::new(Line::from(error.to_string()).red()).wrap(Wrap { trim: false }));
     } else if trusting_all {
-        header.push(Line::from("Trusting hooks...".dim()));
+        header.push(Line::from("正在信任钩子...".dim()));
     }
 
     SelectionViewParams {
         footer_hint: Some(standard_popup_hint_line_for_keymap(&keymap.list)),
         items: vec![
-            selection_item("Review hooks", trusting_all),
-            selection_item("Trust all and continue", trusting_all),
-            selection_item("Continue without trusting (hooks won't run)", trusting_all),
+            selection_item("审查钩子", trusting_all),
+            selection_item("全部信任并继续", trusting_all),
+            selection_item("不信任直接继续（钩子将不会运行）", trusting_all),
         ],
         header: Box::new(header),
         ..Default::default()

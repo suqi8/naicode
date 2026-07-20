@@ -15,9 +15,9 @@ use codex_cli::read_api_key_from_stdin;
 use codex_cli::run_login_status;
 use codex_cli::run_login_with_access_token;
 use codex_cli::run_login_with_api_key;
-use codex_cli::run_relay_login;
 use codex_cli::run_login_with_device_code;
 use codex_cli::run_logout;
+use codex_cli::run_relay_login;
 use codex_cloud_tasks::Cli as CloudTasksCli;
 use codex_exec::Cli as ExecCli;
 use codex_exec::Command as ExecCommand;
@@ -90,7 +90,7 @@ use codex_terminal_detection::TerminalName;
 
 /// naicode CLI —— 酸奶中转站专用命令行编程助手
 ///
-/// 若未指定子命令，选项将转发给交互式 CLI。
+/// If no subcommand is specified, options will be forwarded to the interactive CLI.
 #[derive(Debug, Parser)]
 #[clap(
     author,
@@ -122,98 +122,98 @@ struct MultitoolCli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
-    /// 非交互式运行 naicode。
+    /// Run Codex non-interactively.
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
 
-    /// 非交互式运行代码评审。
+    /// Run a code review non-interactively.
     Review(ReviewCommand),
 
-    /// 管理登录。
+    /// Manage login.
     Login(LoginCommand),
 
-    /// 移除已存储的认证凭据。
+    /// Remove stored authentication credentials.
     Logout(LogoutCommand),
 
-    /// 管理 naicode 的外部 MCP 服务器。
+    /// Manage external MCP servers for Codex.
     Mcp(McpCli),
 
-    /// 管理 naicode 插件。
+    /// Manage Codex plugins.
     Plugin(PluginCli),
 
-    /// 将 naicode 作为 MCP 服务器启动（stdio）。
+    /// Start Codex as an MCP server (stdio).
     McpServer(McpServerCommand),
 
-    /// [实验性] 运行 app server 或相关工具。
+    /// [experimental] Run the app server or related tooling.
     AppServer(AppServerCommand),
 
-    /// [实验性] 管理启用了远程控制的 app-server 守护进程。
+    /// [experimental] Manage the app-server daemon with remote control enabled.
     RemoteControl(RemoteControlCommand),
 
-    /// 启动 naicode 桌面应用（若缺失则打开安装程序）。
+    /// Launch the Codex desktop app (opens the app installer if missing).
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     App(app_cmd::AppCommand),
 
-    /// 生成 shell 补全脚本。
+    /// Generate shell completion scripts.
     Completion(CompletionCommand),
 
-    /// 将 naicode 更新到最新版本。
+    /// Update Codex to the latest version.
     Update,
 
-    /// 诊断本地 naicode 安装、配置、认证及运行时健康状态。
+    /// Diagnose local Codex installation, config, auth, and runtime health.
     Doctor(DoctorCommand),
 
-    /// 在 naicode 提供的沙箱中运行命令。
+    /// Run commands within a Codex-provided sandbox.
     Sandbox(HostSandboxArgs),
 
-    /// 调试工具。
+    /// Debugging tools.
     Debug(DebugCommand),
 
-    /// Execpolicy 工具。
+    /// Execpolicy tooling.
     #[clap(hide = true)]
     Execpolicy(ExecpolicyCommand),
 
-    /// 将 naicode agent 生成的最新 diff 通过 `git apply` 应用到本地工作区。
+    /// Apply the latest diff produced by Codex agent as a `git apply` to your local working tree.
     #[clap(visible_alias = "a")]
     Apply(ApplyCommand),
 
-    /// 恢复之前的交互会话（默认显示选择器；使用 --last 继续最近一次会话）。
+    /// Resume a previous interactive session (picker by default; use --last to continue the most recent).
     Resume(ResumeCommand),
 
-    /// 按 id 或会话名称归档已保存的会话。
+    /// Archive a saved session by id or session name.
     Archive(SessionArchiveCommand),
 
-    /// 按 id 或会话名称永久删除已保存的会话。
+    /// Permanently delete a saved session by id or session name.
     Delete(DeleteCommand),
 
-    /// 按 id 或会话名称取消归档已保存的会话。
+    /// Unarchive a saved session by id or session name.
     Unarchive(SessionArchiveCommand),
 
-    /// 复刻之前的交互会话（默认显示选择器；使用 --last 复刻最近一次会话）。
+    /// Fork a previous interactive session (picker by default; use --last to fork the most recent).
     Fork(ForkCommand),
 
-    /// [实验性] 浏览云端任务并在本地应用变更。
+    /// [EXPERIMENTAL] Browse tasks from Codex Cloud and apply changes locally.
     #[clap(name = "cloud", alias = "cloud-tasks")]
     Cloud(CloudTasksCli),
 
-    /// 内部：运行 responses API 代理。
+    /// Internal: run the responses API proxy.
     #[clap(hide = true)]
     ResponsesApiProxy(ResponsesApiProxyArgs),
 
-    /// 内部：将 stdio 中继到 Unix domain socket。
+    /// Internal: relay stdio to a Unix domain socket.
     #[clap(hide = true, name = "stdio-to-uds")]
     StdioToUds(StdioToUdsCommand),
 
-    /// [实验性] 运行独立的 exec-server 服务。
+    /// [EXPERIMENTAL] Run the standalone exec-server service.
     ExecServer(ExecServerCommand),
 
-    /// 查看功能标志。
+    /// Inspect feature flags.
     Features(FeaturesCli),
 }
 
 #[derive(Debug, Parser)]
 struct CompletionCommand {
-    /// 为指定 shell 生成补全脚本
+    /// Shell to generate completions for
     #[clap(value_enum, default_value_t = Shell::Bash)]
     shell: Shell,
 }
@@ -226,20 +226,20 @@ struct DebugCommand {
 
 #[derive(Debug, clap::Subcommand)]
 enum DebugSubcommand {
-    /// 以 JSON 格式渲染原始 model 目录。
+    /// Render the raw model catalog as JSON.
     Models(DebugModelsCommand),
 
-    /// 工具：帮助调试 app server。
+    /// Tooling: helps debug the app server.
     AppServer(DebugAppServerCommand),
 
-    /// 以 JSON 格式渲染模型可见的 prompt 输入列表。
+    /// Render the model-visible prompt input list as JSON.
     PromptInput(DebugPromptInputCommand),
 
-    /// 重放 rollout trace 包并写入精简状态 JSON。
+    /// Replay a rollout trace bundle and write reduced state JSON.
     #[clap(hide = true)]
     TraceReduce(DebugTraceReduceCommand),
 
-    /// 内部：重置本地记忆状态以全新开始。
+    /// Internal: reset local memory state for a fresh start.
     #[clap(hide = true)]
     ClearMemories,
 }
@@ -264,25 +264,25 @@ struct DebugAppServerSendMessageV2Command {
 
 #[derive(Debug, Parser)]
 struct DebugPromptInputCommand {
-    /// 追加在会话上下文之后的可选用户 prompt。
+    /// Optional user prompt to append after session context.
     #[arg(value_name = "PROMPT")]
     prompt: Option<String>,
 
-    /// 附加到用户 prompt 的可选图片。
+    /// Optional image(s) to attach to the user prompt.
     #[arg(long = "image", short = 'i', value_name = "FILE", value_delimiter = ',', num_args = 1..)]
     images: Vec<PathBuf>,
 }
 
 #[derive(Debug, Parser)]
 struct DebugModelsCommand {
-    /// 跳过刷新，仅转储随此二进制文件内置的目录。
+    /// Skip refresh and dump only the bundled catalog shipped with this binary.
     #[arg(long = "bundled", default_value_t = false)]
     bundled: bool,
 }
 
 #[derive(Debug, Parser)]
 struct ReviewCommand {
-    /// 当 config.toml 包含此版本 naicode 无法识别的字段时报错退出。
+    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
@@ -292,38 +292,38 @@ struct ReviewCommand {
 
 #[derive(Debug, Parser)]
 struct McpServerCommand {
-    /// 当 config.toml 包含此版本 naicode 无法识别的字段时报错退出。
+    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 }
 
 #[derive(Debug, Parser)]
 struct DebugTraceReduceCommand {
-    /// Trace bundle 目录，包含 manifest.json 和 trace.jsonl。
+    /// Trace bundle directory containing manifest.json and trace.jsonl.
     #[arg(value_name = "TRACE_BUNDLE")]
     trace_bundle: PathBuf,
 
-    /// 精简状态 JSON 的输出路径。默认为 TRACE_BUNDLE/state.json。
+    /// Output path for reduced RolloutTrace JSON. Defaults to TRACE_BUNDLE/state.json.
     #[arg(long = "output", short = 'o', value_name = "FILE")]
     output: Option<PathBuf>,
 }
 
 #[derive(Debug, Parser)]
 struct ResumeCommand {
-    /// 会话 id（UUID）或会话名称。UUID 优先解析。
-    /// 若省略，使用 --last 选取最近一次会话。
+    /// Session id (UUID) or session name. UUIDs take precedence if it parses.
+    /// If omitted, use --last to pick the most recent recorded session.
     #[arg(value_name = "SESSION_ID")]
     session_id: Option<String>,
 
-    /// 不显示选择器，直接继续最近一次会话。
+    /// Continue the most recent session without showing the picker.
     #[arg(long = "last", default_value_t = false)]
     last: bool,
 
-    /// 显示所有会话（禁用工作目录过滤并显示 CWD 列）。
+    /// Show all sessions (disables cwd filtering and shows CWD column).
     #[arg(long = "all", default_value_t = false)]
     all: bool,
 
-    /// 在恢复选择器和 --last 中包含非交互式会话。
+    /// Include non-interactive sessions in the resume picker and --last selection.
     #[arg(long = "include-non-interactive", default_value_t = false)]
     include_non_interactive: bool,
 
@@ -336,7 +336,7 @@ struct ResumeCommand {
 
 #[derive(Debug, Parser)]
 struct SessionArchiveCommand {
-    /// 会话 id（UUID）或会话名称。UUID 优先解析。
+    /// Session id (UUID) or session name. UUIDs take precedence if it parses.
     #[arg(value_name = "SESSION")]
     target: String,
 
@@ -352,7 +352,7 @@ struct SessionArchiveConfigOverrides {
     #[clap(flatten)]
     shared: SharedCliOptions,
 
-    /// 当 config.toml 包含此版本 naicode 无法识别的字段时报错退出。
+    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
@@ -365,23 +365,23 @@ struct DeleteCommand {
     #[clap(flatten)]
     session: SessionArchiveCommand,
 
-    /// 直接删除，不弹出确认。SESSION 必须为 UUID。
+    /// Delete without prompting. SESSION must be a UUID.
     #[arg(long, default_value_t = false)]
     force: bool,
 }
 
 #[derive(Debug, Parser)]
 struct ForkCommand {
-    /// 会话/对话 id（UUID）。提供时复刻该会话。
-    /// 若省略，使用 --last 选取最近一次会话。
+    /// Conversation/session id (UUID). When provided, forks this session.
+    /// If omitted, use --last to pick the most recent recorded session.
     #[arg(value_name = "SESSION_ID")]
     session_id: Option<String>,
 
-    /// 不显示选择器，直接复刻最近一次会话。
+    /// Fork the most recent session without showing the picker.
     #[arg(long = "last", default_value_t = false)]
     last: bool,
 
-    /// 显示所有会话（禁用工作目录过滤并显示 CWD 列）。
+    /// Show all sessions (disables cwd filtering and shows CWD column).
     #[arg(long = "all", default_value_t = false)]
     all: bool,
 
@@ -431,14 +431,14 @@ type HostSandboxArgs = UnsupportedSandboxArgs;
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 #[derive(Debug, Parser)]
 struct UnsupportedSandboxArgs {
-    /// 为指定平台提供的沙箱参数。
+    /// Layer $CODEX_HOME/<name>.config.toml on top of the base user config.
     #[arg(long = "profile", short = 'p')]
     pub config_profile: Option<ProfileV2Name>,
 
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
 
-    /// 在主机沙箱中运行的完整命令参数。
+    /// Full command args to run under the host sandbox.
     #[arg(trailing_var_arg = true)]
     pub command: Vec<String>,
 }
@@ -451,7 +451,7 @@ struct ExecpolicyCommand {
 
 #[derive(Debug, clap::Subcommand)]
 enum ExecpolicySubcommand {
-    /// 对命令执行 execpolicy 检查。
+    /// Check execpolicy files against a command.
     #[clap(name = "check")]
     Check(ExecPolicyCheckCommand),
 }
@@ -463,13 +463,13 @@ struct LoginCommand {
 
     #[arg(
         long = "with-api-key",
-        help = "从 stdin 读取 API key（例：`printenv OPENAI_API_KEY | naicode login --with-api-key`）"
+        help = "Read the API key from stdin (e.g. `printenv OPENAI_API_KEY | codex login --with-api-key`)"
     )]
     with_api_key: bool,
 
     #[arg(
         long = "with-access-token",
-        help = "从 stdin 读取 access token（例：`printenv CODEX_ACCESS_TOKEN | naicode login --with-access-token`）"
+        help = "Read the access token from stdin (e.g. `printenv CODEX_ACCESS_TOKEN | codex login --with-access-token`)"
     )]
     with_access_token: bool,
 
@@ -478,7 +478,7 @@ struct LoginCommand {
         num_args = 0..=1,
         default_missing_value = "",
         value_name = "API_KEY",
-        help = "（已废弃）请改用 --with-api-key",
+        help = "(deprecated) Previously accepted the API key directly; now exits with guidance to use --with-api-key",
         hide = true
     )]
     api_key: Option<String>,
@@ -486,12 +486,12 @@ struct LoginCommand {
     #[arg(long = "device-auth")]
     use_device_code: bool,
 
-    /// 实验性：使用自定义 OAuth issuer base URL（高级）
-    /// 覆盖 OAuth issuer base URL（高级）
+    /// EXPERIMENTAL: Use custom OAuth issuer base URL (advanced)
+    /// Override the OAuth issuer base URL (advanced)
     #[arg(long = "experimental_issuer", value_name = "URL", hide = true)]
     issuer_base_url: Option<String>,
 
-    /// 实验性：使用自定义 OAuth client ID（高级）
+    /// EXPERIMENTAL: Use custom OAuth client ID (advanced)
     #[arg(long = "experimental_client-id", value_name = "CLIENT_ID", hide = true)]
     client_id: Option<String>,
 
@@ -501,7 +501,7 @@ struct LoginCommand {
 
 #[derive(Debug, clap::Subcommand)]
 enum LoginSubcommand {
-    /// 显示登录状态。
+    /// Show login status.
     Status,
 }
 
@@ -513,15 +513,16 @@ struct LogoutCommand {
 
 #[derive(Debug, Parser)]
 struct AppServerCommand {
-    /// 省略则运行 app server；指定子命令使用相关工具。
+    /// Omit to run the app server; specify a subcommand for tooling.
     #[command(subcommand)]
     subcommand: Option<AppServerSubcommand>,
 
-    /// 当 config.toml 包含此版本 naicode 无法识别的字段时报错退出。
+    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
-    /// 传输端点 URL。支持：`stdio://`（默认）、`unix://`、`unix://PATH`、`ws://IP:PORT`、`off`。
+    /// Transport endpoint URL. Supported values: `stdio://` (default),
+    /// `unix://`, `unix://PATH`, `ws://IP:PORT`, `off`.
     #[arg(
         long = "listen",
         value_name = "URL",
@@ -529,24 +530,29 @@ struct AppServerCommand {
     )]
     listen: codex_app_server::AppServerTransport,
 
-    /// 使用 stdio 作为传输（等同于 `--listen stdio://`）。
+    /// Use stdio as the transport (equivalent to `--listen stdio://`).
     #[arg(long = "stdio", conflicts_with = "listen")]
     stdio: bool,
 
-    /// 为此 app-server 进程启用远程控制，不改变持久化设置。
+    /// Enable remote control for this app-server process without changing persistence.
     #[arg(long = "remote-control", hide = true)]
     remote_control: bool,
 
-    /// 控制是否默认启用分析统计。
+    /// Controls whether analytics are enabled by default.
     ///
-    /// app-server 默认禁用分析统计，用户需在 config.toml 中显式开启：
+    /// Analytics are disabled by default for app-server. Users have to explicitly opt in
+    /// via the `analytics` section in the config.toml file.
+    ///
+    /// However, for first-party use cases like the VSCode IDE extension, we default analytics
+    /// to be enabled by default by setting this flag. Users can still opt out by setting this
+    /// in their config.toml:
     ///
     /// ```toml
     /// [analytics]
-    /// enabled = true
+    /// enabled = false
     /// ```
     ///
-    /// 对于 VSCode 等第一方使用场景，可通过此标志默认开启。
+    /// See https://developers.openai.com/codex/config-advanced/#metrics for more details.
     #[arg(long = "analytics-default-enabled")]
     analytics_default_enabled: bool,
 
@@ -556,27 +562,27 @@ struct AppServerCommand {
 
 #[derive(Debug, Parser)]
 struct ExecServerCommand {
-    /// 当 config.toml 包含此版本 naicode 无法识别的字段时报错退出。
+    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
-    /// 传输端点 URL。支持：`ws://IP:PORT`（默认）、`stdio`、`stdio://`。
+    /// Transport endpoint URL. Supported values: `ws://IP:PORT` (default), `stdio`, `stdio://`.
     #[arg(long = "listen", value_name = "URL", conflicts_with = "remote")]
     listen: Option<String>,
 
-    /// 使用指定 base URL 将此 exec-server 注册为远程环境。
+    /// Register this exec-server as a remote environment using the given base URL.
     #[arg(long = "remote", value_name = "URL", requires = "environment_id")]
     remote: Option<String>,
 
-    /// 远程注册时附加的环境 id。
+    /// Environment id to attach to when registering remotely.
     #[arg(long = "environment-id", value_name = "ID")]
     environment_id: Option<String>,
 
-    /// 人类可读的环境名称。
+    /// Human-readable environment name.
     #[arg(long = "name", value_name = "NAME")]
     name: Option<String>,
 
-    /// 使用 CODEX_ACCESS_TOKEN 中的 Agent Identity 认证进行远程注册。
+    /// Use Agent Identity auth from CODEX_ACCESS_TOKEN for remote registration.
     #[arg(long = "use-agent-identity-auth", requires = "remote")]
     use_agent_identity_auth: bool,
 }
@@ -584,19 +590,19 @@ struct ExecServerCommand {
 #[derive(Debug, clap::Subcommand)]
 #[allow(clippy::enum_variant_names)]
 enum AppServerSubcommand {
-    /// 管理本地 app-server 守护进程。
+    /// Manage the local app-server daemon.
     Daemon(AppServerDaemonCommand),
 
-    /// 将 stdio 字节代理到正在运行的 app-server 控制套接字。
+    /// Proxy stdio bytes to the running app-server control socket.
     Proxy(AppServerProxyCommand),
 
-    /// [实验性] 为 app server 协议生成 TypeScript 绑定。
+    /// [experimental] Generate TypeScript bindings for the app server protocol.
     GenerateTs(GenerateTsCommand),
 
-    /// [实验性] 为 app server 协议生成 JSON Schema。
+    /// [experimental] Generate JSON Schema for the app server protocol.
     GenerateJsonSchema(GenerateJsonSchemaCommand),
 
-    /// [内部] 为 naicode 工具链生成内部 JSON Schema。
+    /// [internal] Generate internal JSON Schema artifacts for Codex tooling.
     #[clap(hide = true)]
     GenerateInternalJsonSchema(GenerateInternalJsonSchemaCommand),
 }
@@ -609,82 +615,82 @@ struct AppServerDaemonCommand {
 
 #[derive(Debug, clap::Subcommand)]
 enum AppServerDaemonSubcommand {
-    /// 为 SSH 驱动的使用场景安装持久化本地 app-server 管理。
+    /// Install durable local app-server management for SSH-driven use.
     Bootstrap(AppServerBootstrapCommand),
 
-    /// 若本地 app server 守护进程未运行则启动它。
+    /// Start the local app server daemon if it is not already running.
     Start,
 
-    /// 重启本地 app server 守护进程。
+    /// Restart the local app server daemon.
     Restart,
 
-    /// 为未来的启动和当前运行的托管守护进程启用远程控制。
+    /// Enable remote control for future starts and a currently running managed daemon.
     EnableRemoteControl,
 
-    /// 为未来的启动和当前运行的托管守护进程禁用远程控制。
+    /// Disable remote control for future starts and a currently running managed daemon.
     DisableRemoteControl,
 
-    /// 停止本地 app server 守护进程。
+    /// Stop the local app server daemon.
     Stop,
 
-    /// 以 JSON 形式打印本地 CLI 和正在运行的 app-server 版本。
+    /// Print local CLI and running app-server versions as JSON.
     Version,
 
-    /// [内部] 运行独立的 pid 更新循环。
+    /// [internal] Run the detached pid-backed standalone updater loop.
     #[clap(hide = true)]
     PidUpdateLoop,
 }
 
 #[derive(Debug, Args)]
 struct AppServerProxyCommand {
-    /// 要连接的 app-server Unix domain socket 路径。
+    /// Path to the app-server Unix domain socket to connect to.
     #[arg(long = "sock", value_name = "SOCKET_PATH", value_parser = parse_socket_path)]
     socket_path: Option<AbsolutePathBuf>,
 }
 
 #[derive(Debug, Args)]
 struct AppServerBootstrapCommand {
-    /// 启动时启用远程控制的托管 app-server。
+    /// Launch the managed app-server with remote control enabled.
     #[arg(long = "remote-control")]
     remote_control: bool,
 }
 
 #[derive(Debug, Args)]
 struct GenerateTsCommand {
-    /// 写入 .ts 文件的输出目录
+    /// Output directory where .ts files will be written
     #[arg(short = 'o', long = "out", value_name = "DIR")]
     out_dir: PathBuf,
 
-    /// 可选：用于格式化生成文件的 Prettier 可执行文件路径
+    /// Optional path to the Prettier executable to format generated files
     #[arg(short = 'p', long = "prettier", value_name = "PRETTIER_BIN")]
     prettier: Option<PathBuf>,
 
-    /// 在生成输出中包含实验性方法和字段
+    /// Include experimental methods and fields in the generated output
     #[arg(long = "experimental", default_value_t = false)]
     experimental: bool,
 }
 
 #[derive(Debug, Args)]
 struct GenerateJsonSchemaCommand {
-    /// 写入 schema 包的输出目录
+    /// Output directory where the schema bundle will be written
     #[arg(short = 'o', long = "out", value_name = "DIR")]
     out_dir: PathBuf,
 
-    /// 在生成输出中包含实验性方法和字段
+    /// Include experimental methods and fields in the generated output
     #[arg(long = "experimental", default_value_t = false)]
     experimental: bool,
 }
 
 #[derive(Debug, Args)]
 struct GenerateInternalJsonSchemaCommand {
-    /// 写入内部 JSON Schema 的输出目录
+    /// Output directory where internal JSON Schema artifacts will be written
     #[arg(short = 'o', long = "out", value_name = "DIR")]
     out_dir: PathBuf,
 }
 
 #[derive(Debug, Parser)]
 struct StdioToUdsCommand {
-    /// 要连接的 Unix domain socket 路径。
+    /// Path to the Unix domain socket to connect to.
     #[arg(value_name = "SOCKET_PATH", value_parser = parse_socket_path)]
     socket_path: AbsolutePathBuf,
 }
@@ -714,7 +720,7 @@ fn format_exit_messages(exit_info: AppExitInfo, color_enabled: bool) -> Vec<Stri
         } else {
             resume_cmd
         };
-        lines.push(format!("继续此会话，请运行 {command}"));
+        lines.push(format!("To continue this session, run {command}"));
     } else if is_fatal && let Some(conversation_id) = conversation_id {
         lines.push(format!("Session ID: {conversation_id}"));
     }
@@ -869,24 +875,25 @@ async fn run_debug_app_server_command(cmd: DebugAppServerCommand) -> anyhow::Res
 
 #[derive(Debug, Default, Parser, Clone)]
 struct FeatureToggles {
-    /// 启用某功能（可重复）。等同于 `-c features.<name>=true`。
+    /// Enable a feature (repeatable). Equivalent to `-c features.<name>=true`.
     #[arg(long = "enable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     enable: Vec<String>,
 
-    /// 禁用某功能（可重复）。等同于 `-c features.<name>=false`。
+    /// Disable a feature (repeatable). Equivalent to `-c features.<name>=false`.
     #[arg(long = "disable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     disable: Vec<String>,
 }
 
 #[derive(Debug, Default, Parser, Clone)]
 struct InteractiveRemoteOptions {
-    /// 将 TUI 连接到远程 app server 端点。
+    /// Connect the TUI to a remote app server endpoint.
     ///
-    /// 支持的形式：`ws://host:port`、`wss://host:port`、`unix://`、`unix://PATH`。
+    /// Accepted forms: `ws://host:port`, `wss://host:port`, `unix://`, or `unix://PATH`.
     #[arg(long = "remote", value_name = "ADDR")]
     remote: Option<String>,
 
-    /// 含有 bearer token 的环境变量名，用于连接远程 app server websocket。
+    /// Name of the environment variable containing the bearer token to send to
+    /// a remote app server websocket.
     #[arg(long = "remote-auth-token-env", value_name = "ENV_VAR")]
     remote_auth_token_env: Option<String>,
 }
@@ -922,17 +929,17 @@ struct FeaturesCli {
 
 #[derive(Debug, Parser)]
 enum FeaturesSubcommand {
-    /// 列出所有已知功能及其阶段和生效状态。
+    /// List known features with their stage and effective state.
     List,
-    /// 在 config.toml 中启用某功能。
+    /// Enable a feature in config.toml.
     Enable(FeatureSetArgs),
-    /// 在 config.toml 中禁用某功能。
+    /// Disable a feature in config.toml.
     Disable(FeatureSetArgs),
 }
 
 #[derive(Debug, Parser)]
 struct FeatureSetArgs {
-    /// 要更新的功能键（例如：unified_exec）。
+    /// Feature key to update (for example: unified_exec).
     feature: String,
 }
 

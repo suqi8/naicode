@@ -447,7 +447,7 @@ impl HookRunCell {
         match &self.state {
             HookRunState::VisibleRunning { start_time, .. }
             | HookRunState::QuietLinger { start_time, .. } => {
-                let hook_text = format!("Running {label} hook");
+                let hook_text = format!("正在运行 {label} 钩子");
                 push_running_hook_header(
                     lines,
                     &hook_text,
@@ -463,7 +463,7 @@ impl HookRunCell {
                     vec![
                         bullet,
                         " ".into(),
-                        format!("{label} hook ({status_text})").into(),
+                        format!("{label} 钩子（{status_text}）").into(),
                     ]
                     .into(),
                 );
@@ -531,7 +531,7 @@ fn hook_context_preview_lines(text: &str, width: u16) -> Vec<Line<'static>> {
     wrapped.truncate(retained_rows);
     let hint = vec![
         HOOK_OUTPUT_BODY_INDENT.into(),
-        format!("… +{omitted_rows} lines ({TRANSCRIPT_HINT})").dim(),
+        format!("… 还有 {omitted_rows} 行（{TRANSCRIPT_HINT}）").dim(),
     ]
     .into();
     wrapped.push(truncate_line_with_ellipsis_if_overflow(hint, width));
@@ -712,9 +712,9 @@ fn push_running_hook_group(
     push_hook_line_separator(lines);
     let label = hook_event_label(group.key.event_name);
     let hook_text = if group.count == 1 {
-        format!("Running {label} hook")
+        format!("正在运行 {label} 钩子")
     } else {
-        format!("Running {} {label} hooks", group.count)
+        format!("正在运行 {} 个 {label} 钩子", group.count)
     };
     push_running_hook_header(
         lines,
@@ -803,11 +803,11 @@ fn hook_completed_bullet(status: HookRunStatus, entries: &[HookOutputEntry]) -> 
 
 fn hook_output_prefix(kind: HookOutputEntryKind) -> &'static str {
     match kind {
-        HookOutputEntryKind::Warning => "warning: ",
-        HookOutputEntryKind::Stop => "stop: ",
-        HookOutputEntryKind::Feedback => "feedback: ",
-        HookOutputEntryKind::Context => "hook context: ",
-        HookOutputEntryKind::Error => "error: ",
+        HookOutputEntryKind::Warning => "警告：",
+        HookOutputEntryKind::Stop => "停止：",
+        HookOutputEntryKind::Feedback => "反馈：",
+        HookOutputEntryKind::Context => "钩子上下文：",
+        HookOutputEntryKind::Error => "错误：",
     }
 }
 
@@ -859,8 +859,8 @@ mod tests {
             }],
         );
         let expected = vec![
-            "• SessionStart hook (completed)".to_string(),
-            "  hook context: ## Working Memory Recall".to_string(),
+            "• SessionStart 钩子（completed）".to_string(),
+            "  钩子上下文：## Working Memory Recall".to_string(),
             "".to_string(),
             "    Source: Codex compaction".to_string(),
         ];
@@ -903,8 +903,8 @@ mod tests {
         assert!(display.iter().all(|line| !line.contains("tail-marker")));
 
         let expected_full = vec![
-            "• SessionStart hook (completed)".to_string(),
-            format!("  hook context: {full_context}"),
+            "• SessionStart 钩子（completed）".to_string(),
+            format!("  钩子上下文：{full_context}"),
         ];
         assert_eq!(
             line_texts(&cell.transcript_lines(/*width*/ 80)),
@@ -958,8 +958,8 @@ mod tests {
         assert_eq!(
             line_texts(&cell.display_lines(/*width*/ 80)),
             vec![
-                "• PostToolUse hook (completed)".to_string(),
-                "  warning: Heads up".to_string(),
+                "• PostToolUse 钩子（completed）".to_string(),
+                "  警告：Heads up".to_string(),
                 "    Review generated files".to_string(),
             ]
         );
@@ -1012,7 +1012,7 @@ mod tests {
 
         assert_eq!(
             rendered,
-            vec!["Running PostToolUse hook: checking output policy".to_string()]
+            vec!["正在运行 PostToolUse 钩子: checking output policy".to_string()]
         );
     }
 

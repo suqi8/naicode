@@ -39,7 +39,7 @@ fn format_warning(additional_dirs: &[PathBuf]) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!(
-        "Ignoring --add-dir ({joined_paths}) because the effective permissions do not allow additional writable roots. Switch to workspace-write or danger-full-access to allow them."
+        "已忽略 --add-dir ({joined_paths})，因为当前生效的权限不允许额外的可写根目录。切换到 workspace-write 或 danger-full-access 才能启用它们。"
     )
 }
 
@@ -97,7 +97,7 @@ mod tests {
             .expect("expected warning for read-only sandbox");
         assert_eq!(
             message,
-            "Ignoring --add-dir (relative, /abs) because the effective permissions do not allow additional writable roots. Switch to workspace-write or danger-full-access to allow them."
+            "已忽略 --add-dir (relative, /abs)，因为当前生效的权限不允许额外的可写根目录。切换到 workspace-write 或 danger-full-access 才能启用它们。"
         );
     }
 
@@ -127,7 +127,7 @@ mod tests {
 
         assert_eq!(
             add_dir_warning_message(&dirs, &profile, Path::new("/tmp/project")),
-            Some("Ignoring --add-dir (/tmp/extra) because the effective permissions do not allow additional writable roots. Switch to workspace-write or danger-full-access to allow them.".to_string())
+            Some("已忽略 --add-dir (/tmp/extra)，因为当前生效的权限不允许额外的可写根目录。切换到 workspace-write 或 danger-full-access 才能启用它们。".to_string())
         );
     }
 

@@ -3,7 +3,24 @@
 use super::*;
 use crate::product_palette;
 
-pub(crate) const SESSION_HEADER_MAX_INNER_WIDTH: usize = 56; // Just an eyeballed value
+pub(crate) const SESSION_HEADER_MAX_INNER_WIDTH: usize = 88; // 原始艺术字最宽 88 列。
+
+pub(crate) const NAICODE_ART: &[&str] = &[
+    "                               _..._       .-'''-.                                     ",
+    "                            .-'_..._''.   '   _    \\ _______                           ",
+    "   _..._            .--.  .' .'      '.\\/   /` '.   \\\\  ___ `'.         __.....__      ",
+    " .'     '.          |__| / .'          .   |     \\  ' ' |--.\\ \\    .-''         '.    ",
+    " .   .-.   .        .--.. '            |   '      |  '| |    \\  '  /     .-''\"'-.  `.  ",
+    " |  '   '  |    __  |  || |            \\    \\     / / | |     |  '/     /________\\   \\ ",
+    " |  |   |  | .:--.'. |  || |             `.   ` ..' /  | |     |  ||                  |",
+    " |  |   |  |/ |   \\ ||  |. '                '-...-'`   | |     ' .'\\ .-------------'",
+    " |  |   |  |`\" __ | ||  | \\ '.          .              | |___.' /'  \\    '-.____...---.",
+    " |  |   |  | .'.''| ||__|  '. `._____.-'/             /_______.'/    `.             .'  ",
+    " |  |   |  |/ /   | |_       `-.______ /              \\_______|/       `''-...... -'    ",
+    " |  |   |  |\\ \\._,\\ '/                `                                                 ",
+    " '--'   '--' `--'  `\"                                                                   ",
+];
+const NAICODE_ART_MIN_WIDTH: usize = 88;
 
 pub(crate) fn card_inner_width(width: u16, max_inner_width: usize) -> Option<usize> {
     if width < 4 {
@@ -165,6 +182,15 @@ pub(crate) fn new_session_info(
             &session.permission_profile,
         ));
         parts.push(Box::new(header));
+
+        if config.show_tooltips {
+            if let Some(notice) = tooltip_override
+                .or_else(|| tooltips::get_tooltip(auth_plan, show_fast_status))
+                .map(|tip| TooltipHistoryCell::new(tip, &config.cwd))
+            {
+                parts.push(Box::new(notice));
+            }
+        }
 
         // Help lines below the header (new copy and list)
         let help_lines: Vec<Line<'static>> = vec![
@@ -331,101 +357,93 @@ impl SessionHeaderHistoryCell {
 
 impl HistoryCell for SessionHeaderHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        if width < 6 {
+        let Some(inner_width) = card_inner_width(width, SESSION_HEADER_MAX_INNER_WIDTH) else {
             return Vec::new();
-        }
-        let w = width as usize;
+        };
 
+        let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
+
+        // Static NAICODE symbol logo. Keeping this in the first history cell lets it
+        // naturally scroll away and avoids introducing a persistent top bar.
         let palette = product_palette::current();
         let logo_style = Style::default().fg(palette.accent).bold();
         let brand_style = Style::default().fg(palette.accent_bright).bold();
-        let accent = Style::default().fg(palette.accent);
-        let muted = Style::default().fg(palette.border_muted);
-        let dim_plain = Style::default().add_modifier(Modifier::DIM);
-
-        // ASCII art logo rows (each ~84 cols). Shown only on wide terminals.
-        const ART: &[&str] = &[
-            "                               _..._       .-'''-.                                     ",
-            "                            .-'_..._''.   '   _    \\ _______                           ",
-            "   _..._            .--.  .' .'      '.\\/   /` '.   \\\\  ___ `'.         __.....__      ",
-            " .'     '.          |__| / .'          .   |     \\  ' ' |--.\\ \\    .-''         '.    ",
-            " .   .-.   .        .--.. '            |   '      |  '| |    \\  '  /     .-''\"'-.  `.  ",
-            " |  '   '  |    __  |  || |            \\    \\     / / | |     |  '/     /________\\   \\ ",
-            " |  |   |  | .:--.'. |  || |             `.   ` ..' /  | |     |  ||                  |",
-            " |  |   |  |/ |   \\ ||  |. '                '-...-'`   | |     ' .'\\ .-------------'",
-            " |  |   |  |`\" __ | ||  | \\ '.          .              | |___.' /'  \\    '-.____...---.",
-            " |  |   |  | .'.''| ||__|  '. `._____.-'/             /_______.'/    `.             .'  ",
-            " |  |   |  |/ /   | |_       `-.______ /              \\_______|/       `''-...... -'    ",
-            " |  |   |  |\\ \\._,\\ '/                `                                                 ",
-            " '--'   '--' `--'  `\"                                                                   ",
+        let title_spans: Vec<Span<'static>> = vec![
+            Span::styled("▰▰ NAICODE ▰▰", logo_style),
+            Span::from("  "),
+            Span::styled("酸奶中转站", brand_style),
+            Span::from(" ").dim(),
+            Span::from(format!("v{}", self.version)).dim(),
         ];
-        const ART_MIN_WIDTH: usize = 86;
 
-        let mut out: Vec<Line<'static>> = Vec::new();
-
-        if w >= ART_MIN_WIDTH {
-            for art_line in ART {
-                let line_w = UnicodeWidthStr::width(*art_line);
-                let row = if line_w < w {
-                    format!("{}{}", art_line, " ".repeat(w - line_w))
-                } else {
-                    art_line.chars().take(w).collect()
-                };
-                out.push(Line::from(Span::styled(row, logo_style)));
-            }
+        const CHANGE_MODEL_HINT_COMMAND: &str = "/model";
+        const CHANGE_MODEL_HINT_EXPLANATION: &str = " 切换";
+        const DIR_LABEL: &str = "directory:";
+        const PERMISSIONS_LABEL: &str = "permissions:";
+        let label_width = if self.yolo_mode {
+            DIR_LABEL.len().max(PERMISSIONS_LABEL.len())
         } else {
-            // Narrow terminal: compact one-line logo
-            out.push(Line::from(vec![
-                Span::styled("*** NAICODE ***", logo_style),
-                Span::raw("  "),
-                Span::styled("酸奶中转站", brand_style),
-                Span::raw("  "),
-                Span::styled(format!("v{}", self.version), dim_plain),
+            DIR_LABEL.len()
+        };
+
+        let model_label = format!(
+            "{model_label:<label_width$}",
+            model_label = "model:",
+            label_width = label_width
+        );
+        let reasoning_label = self.reasoning_label();
+        let model_spans: Vec<Span<'static>> = {
+            let mut spans = vec![
+                Span::from(format!("{model_label} ")).dim(),
+                Span::styled(self.model.clone(), self.model_style),
+            ];
+            if let Some(reasoning) = reasoning_label {
+                spans.push(Span::from(" "));
+                spans.push(Span::from(reasoning.to_owned()));
+            }
+            if self.show_fast_status {
+                spans.push("   ".into());
+                spans.push(Span::styled("fast", self.model_style.magenta()));
+            }
+            spans.push("   ".dim());
+            spans.push(Span::styled(
+                CHANGE_MODEL_HINT_COMMAND,
+                Style::default().fg(palette.accent),
+            ));
+            spans.push(CHANGE_MODEL_HINT_EXPLANATION.dim());
+            spans
+        };
+
+        let dir_label = format!("{DIR_LABEL:<label_width$}");
+        let dir_prefix = format!("{dir_label} ");
+        let dir_prefix_width = UnicodeWidthStr::width(dir_prefix.as_str());
+        let dir_max_width = inner_width.saturating_sub(dir_prefix_width);
+        let dir = self.format_directory(Some(dir_max_width));
+        let dir_spans = vec![Span::from(dir_prefix).dim(), Span::from(dir)];
+
+        let mut lines = if inner_width >= NAICODE_ART_MIN_WIDTH {
+            NAICODE_ART
+                .iter()
+                .map(|line| make_row(vec![Span::styled(*line, logo_style)]))
+                .collect()
+        } else {
+            vec![make_row(title_spans)]
+        };
+        lines.extend([
+            make_row(Vec::new()),
+            make_row(model_spans),
+            make_row(dir_spans),
+        ]);
+
+        if self.yolo_mode {
+            let permissions_label = format!("{PERMISSIONS_LABEL:<label_width$}");
+            lines.push(make_row(vec![
+                Span::from(format!("{permissions_label} ")).dim(),
+                "YOLO 模式".magenta().bold(),
             ]));
         }
 
-        // Separator
-        out.push(Line::from(Span::styled(
-            "─".repeat(w.min(ART_MIN_WIDTH)),
-            muted,
-        )));
-
-        // Info line
-        let reasoning_label = self.reasoning_label();
-        let model_part: String = {
-            let mut s = self.model.clone();
-            if let Some(r) = reasoning_label {
-                s.push_str(&format!("  {r}"));
-            }
-            if self.show_fast_status {
-                s.push_str("  fast");
-            }
-            s
-        };
-        let dir_max = (w / 3).max(8);
-        let dir = self.format_directory(Some(dir_max));
-
-        let mut info_spans: Vec<Span<'static>> = vec![
-            Span::styled("模型 ", muted),
-            Span::raw(model_part),
-            Span::styled("   ·   ", muted),
-            Span::styled("目录 ", muted),
-            Span::raw(dir),
-            Span::styled("   ·   ", muted),
-            Span::styled("/model", accent),
-            Span::styled(" 切换", dim_plain),
-        ];
-        if self.yolo_mode {
-            info_spans.push(Span::styled(
-                "   YOLO 模式",
-                Style::default()
-                    .fg(palette.status_warning)
-                    .bold(),
-            ));
-        }
-        out.push(Line::from(info_spans));
-        out.push(Line::from(""));
-        out
+        with_border(lines)
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {

@@ -2,15 +2,13 @@
 source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
-ⓘ This content can't be shown
-  We take extra caution with
-  cybersecurity requests. If
-  you’re a security professional,
-  you may be able to apply for
-  Trusted Access.
-  Trusted Access: https://
-  openai.com/form/enterprise-
-  trusted-access-for-cyber/
-  Learn more: https://
+ⓘ 无法显示此内容
+  对于网络安全相关请求，我们会格外
+  谨慎。如果你是安全专业人员，或许
+  可以申请可信访问权限。
+  可信访问: https://openai.com/
+  form/enterprise-trusted-access-
+  for-cyber/
+  了解更多: https://
   help.openai.com/en/
   articles/20001326

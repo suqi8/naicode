@@ -1,0 +1,70 @@
+<style>
+  .intro{max-width:1200px;margin:0 auto 18px;color:#64748b}.grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.theme-card{border:2px solid transparent;border-radius:14px;overflow:hidden;cursor:pointer;box-shadow:0 10px 30px rgba(15,23,42,.10);transition:.15s}.theme-card:hover{transform:translateY(-2px)}.theme-card.selected{outline:3px solid #111827;outline-offset:3px}.preview{min-height:355px;padding:23px;font:14px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace}.caption{background:white;padding:14px 16px}.caption h3{margin:0 0 5px}.caption p{margin:0;color:#64748b}.logo{white-space:pre;font-size:10px;line-height:1.04;font-weight:800;margin:22px auto;text-align:left;width:max-content}.info{max-width:390px;margin:0 auto;border-radius:8px;padding:10px 14px}.model{margin-top:18px;border-radius:8px;padding:10px 12px}.prices{display:grid;grid-template-columns:repeat(2,1fr);gap:3px 12px;margin-top:7px;font-size:12px}.input{margin-top:28px;border-radius:8px;padding:11px 13px}.swatches{display:flex;gap:7px;margin-top:10px}.swatch{width:23px;height:23px;border-radius:50%;border:1px solid rgba(0,0,0,.15)}
+</style>
+
+<h2 style="max-width:1200px;margin:0 auto 6px">选择 naicode 的默认主题色</h2>
+<p class="intro">这次不再使用发白的“浅蓝”。下面四种都以蓝色为主，但明度、饱和度和气质不同。点击整张卡片即可选择。</p>
+
+<div class="grid">
+  <div class="theme-card" data-choice="ice-blue" onclick="toggleSelect(this)">
+    <div class="preview" style="background:#0b1017;color:#dcecff;border-color:#26394d">
+      <div style="color:#75baff">┌─ NAICODE / 新对话 ───────────────────────────┐</div>
+      <div class="logo" style="color:#75baff;text-shadow:0 0 15px rgba(117,186,255,.22)">███╗  ██╗  █████╗  ██╗
+████╗ ██║ ██╔══██╗ ██║
+██╔██╗██║ ███████║ ██║
+██║╚████║ ██╔══██║ ██║
+╚═╝ ╚═══╝ ╚═╝  ╚═╝ ╚═╝</div>
+      <div class="info" style="background:#101b27;border:1px solid #345777;color:#93b7d4"><b style="color:#b9ddff">gpt-5.6-sol</b> · default · 思考：低</div>
+      <div class="model" style="background:#101b27;border:1px solid #345777"><b style="color:#75baff">› gpt-5.6-sol</b><div class="prices" style="color:#8ca9c0"><span>输入 <b style="color:#b9ddff">¥0.20</b></span><span>输出 <b style="color:#b9ddff">¥1.60</b></span><span>缓存读 ¥0.02</span><span>缓存写 ¥0.25</span></div></div>
+      <div class="input" style="border:1px solid #477aa5;color:#b9ddff">› 输入任务…</div>
+    </div>
+    <div class="caption"><h3>A · 冰川蓝</h3><p>冷静、清晰、偏专业。蓝色不发白，适合长时间编码。</p><div class="swatches"><i class="swatch" style="background:#75baff"></i><i class="swatch" style="background:#b9ddff"></i><i class="swatch" style="background:#101b27"></i><i class="swatch" style="background:#0b1017"></i></div></div>
+  </div>
+
+  <div class="theme-card" data-choice="electric-cyan" onclick="toggleSelect(this)">
+    <div class="preview" style="background:#071317;color:#d9fbff">
+      <div style="color:#21d4e8">┌─ NAICODE / 新对话 ───────────────────────────┐</div>
+      <div class="logo" style="color:#21d4e8;text-shadow:0 0 18px rgba(33,212,232,.28)">███╗  ██╗  █████╗  ██╗
+████╗ ██║ ██╔══██╗ ██║
+██╔██╗██║ ███████║ ██║
+██║╚████║ ██╔══██║ ██║
+╚═╝ ╚═══╝ ╚═╝  ╚═╝ ╚═╝</div>
+      <div class="info" style="background:#0a2025;border:1px solid #18717d;color:#84bec5"><b style="color:#8cf4ff">gpt-5.6-sol</b> · default · 思考：低</div>
+      <div class="model" style="background:#0a2025;border:1px solid #18717d"><b style="color:#21d4e8">› gpt-5.6-sol</b><div class="prices" style="color:#71a8af"><span>输入 <b style="color:#8cf4ff">¥0.20</b></span><span>输出 <b style="color:#8cf4ff">¥1.60</b></span><span>缓存读 ¥0.02</span><span>缓存写 ¥0.25</span></div></div>
+      <div class="input" style="border:1px solid #1c91a0;color:#8cf4ff">› 输入任务…</div>
+    </div>
+    <div class="caption"><h3>B · 电光青</h3><p>更鲜明、更有科技感，焦点非常清楚，但视觉存在感较强。</p><div class="swatches"><i class="swatch" style="background:#21d4e8"></i><i class="swatch" style="background:#8cf4ff"></i><i class="swatch" style="background:#0a2025"></i><i class="swatch" style="background:#071317"></i></div></div>
+  </div>
+
+  <div class="theme-card" data-choice="cobalt-blue" onclick="toggleSelect(this)">
+    <div class="preview" style="background:#0c1020;color:#e5eaff">
+      <div style="color:#7695ff">┌─ NAICODE / 新对话 ───────────────────────────┐</div>
+      <div class="logo" style="color:#7695ff;text-shadow:0 0 18px rgba(118,149,255,.28)">███╗  ██╗  █████╗  ██╗
+████╗ ██║ ██╔══██╗ ██║
+██╔██╗██║ ███████║ ██║
+██║╚████║ ██╔══██║ ██║
+╚═╝ ╚═══╝ ╚═╝  ╚═╝ ╚═╝</div>
+      <div class="info" style="background:#141a32;border:1px solid #405394;color:#9da9d5"><b style="color:#bac7ff">gpt-5.6-sol</b> · default · 思考：低</div>
+      <div class="model" style="background:#141a32;border:1px solid #405394"><b style="color:#7695ff">› gpt-5.6-sol</b><div class="prices" style="color:#929ec8"><span>输入 <b style="color:#bac7ff">¥0.20</b></span><span>输出 <b style="color:#bac7ff">¥1.60</b></span><span>缓存读 ¥0.02</span><span>缓存写 ¥0.25</span></div></div>
+      <div class="input" style="border:1px solid #556fc7;color:#bac7ff">› 输入任务…</div>
+    </div>
+    <div class="caption"><h3>C · 钴蓝</h3><p>蓝中带少量紫调，沉稳但不单调，品牌辨识度更高。</p><div class="swatches"><i class="swatch" style="background:#7695ff"></i><i class="swatch" style="background:#bac7ff"></i><i class="swatch" style="background:#141a32"></i><i class="swatch" style="background:#0c1020"></i></div></div>
+  </div>
+
+  <div class="theme-card" data-choice="azure-blue" onclick="toggleSelect(this)">
+    <div class="preview" style="background:#07121d;color:#e1f2ff">
+      <div style="color:#279cff">┌─ NAICODE / 新对话 ───────────────────────────┐</div>
+      <div class="logo" style="color:#279cff;text-shadow:0 0 18px rgba(39,156,255,.30)">███╗  ██╗  █████╗  ██╗
+████╗ ██║ ██╔══██╗ ██║
+██╔██╗██║ ███████║ ██║
+██║╚████║ ██╔══██║ ██║
+╚═╝ ╚═══╝ ╚═╝  ╚═╝ ╚═╝</div>
+      <div class="info" style="background:#0b2032;border:1px solid #23618f;color:#8ebad8"><b style="color:#86caff">gpt-5.6-sol</b> · default · 思考：低</div>
+      <div class="model" style="background:#0b2032;border:1px solid #23618f"><b style="color:#279cff">› gpt-5.6-sol</b><div class="prices" style="color:#82a9c5"><span>输入 <b style="color:#86caff">¥0.20</b></span><span>输出 <b style="color:#86caff">¥1.60</b></span><span>缓存读 ¥0.02</span><span>缓存写 ¥0.25</span></div></div>
+      <div class="input" style="border:1px solid #287ec0;color:#86caff">› 输入任务…</div>
+    </div>
+    <div class="caption"><h3>D · 深空蔚蓝</h3><p>更纯正、更饱和的蓝色，对比强，接近现代开发工具风格。</p><div class="swatches"><i class="swatch" style="background:#279cff"></i><i class="swatch" style="background:#86caff"></i><i class="swatch" style="background:#0b2032"></i><i class="swatch" style="background:#07121d"></i></div></div>
+  </div>
+</div>
+
+<p style="max-width:1200px;margin:18px auto 0;color:#64748b">点击其中一个方案。当前只选择默认配色，后续仍会保留用户自定义主色的能力。</p>

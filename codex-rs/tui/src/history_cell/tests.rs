@@ -522,11 +522,7 @@ fn unified_exec_interaction_cell_renders_input() {
     let lines = render_transcript(&cell);
     assert_eq!(
         lines,
-        vec![
-            "↳ 已与后台终端交互 · echo hello",
-            "  └ ls",
-            "    pwd",
-        ],
+        vec!["↳ 已与后台终端交互 · echo hello", "  └ ls", "    pwd",],
     );
 }
 
@@ -1193,10 +1189,7 @@ fn web_search_history_cell_short_query_does_not_wrap() {
     );
     let rendered = render_lines(&cell.display_lines(/*width*/ 64));
 
-    assert_eq!(
-        rendered,
-        vec!["• 已搜索网页：short query".to_string()]
-    );
+    assert_eq!(rendered, vec!["• 已搜索网页：short query".to_string()]);
 }
 
 #[test]
@@ -1519,6 +1512,46 @@ fn completed_mcp_tool_call_multiple_outputs_inline_snapshot() {
     let rendered = render_lines(&cell.display_lines(/*width*/ 120)).join("\n");
 
     insta::assert_snapshot!(rendered);
+}
+
+#[test]
+fn session_header_wide_uses_exact_naicode_art_inside_border() {
+    let cell = SessionHeaderHistoryCell::new(
+        "gpt-5".to_string(),
+        /*reasoning_effort*/ None,
+        /*show_fast_status*/ false,
+        std::env::temp_dir(),
+        "test",
+    );
+
+    let lines = render_lines(&cell.display_lines(/*width*/ 100));
+    assert_eq!(
+        lines.first().expect("top border"),
+        &format!("╭{}╮", "─".repeat(90))
+    );
+    assert!(lines[1].starts_with(&format!("│ {}", NAICODE_ART[0])));
+    assert!(lines[1].ends_with(" │"));
+    assert!(lines[13].starts_with(&format!("│ {}", NAICODE_ART[12])));
+    assert!(lines[13].ends_with(" │"));
+    assert_eq!(
+        lines.last().expect("bottom border"),
+        &format!("╰{}╯", "─".repeat(90))
+    );
+}
+
+#[test]
+fn session_header_narrow_keeps_compact_fallback() {
+    let cell = SessionHeaderHistoryCell::new(
+        "gpt-5".to_string(),
+        /*reasoning_effort*/ None,
+        /*show_fast_status*/ false,
+        std::env::temp_dir(),
+        "test",
+    );
+
+    let rendered = render_lines(&cell.display_lines(/*width*/ 80)).join("\n");
+    assert!(rendered.contains("▰▰ NAICODE ▰▰  酸奶中转站 vtest"));
+    assert!(!rendered.contains(NAICODE_ART[0]));
 }
 
 #[test]

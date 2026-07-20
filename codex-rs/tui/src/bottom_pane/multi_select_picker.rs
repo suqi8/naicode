@@ -78,7 +78,7 @@ use crate::text_formatting::truncate_text;
 const ITEM_NAME_TRUNCATE_LEN: usize = 21;
 
 /// Placeholder text shown in the search input when empty.
-const SEARCH_PLACEHOLDER: &str = "Type to search";
+const SEARCH_PLACEHOLDER: &str = "输入以搜索";
 
 /// Prefix displayed before the search query (mimics a command prompt).
 const SEARCH_PROMPT_PREFIX: &str = "> ";
@@ -668,7 +668,7 @@ impl Renderable for MultiSelectPicker {
                 &rows.rows,
                 &rows.state,
                 render_area.height as usize,
-                "no matches",
+                "无匹配项",
             );
         }
 
@@ -822,9 +822,9 @@ impl MultiSelectPickerBuilder {
 
         let instructions = if self.instructions.is_empty() {
             let mut spans = vec![
-                "Press ".into(),
+                "按 ".into(),
                 key_hint::plain(KeyCode::Char(' ')).into(),
-                " to toggle".into(),
+                " 切换".into(),
             ];
             if self.ordering_enabled
                 && let (Some(move_left), Some(move_right)) = (
@@ -832,21 +832,21 @@ impl MultiSelectPickerBuilder {
                     primary_binding(&self.keymap.move_right),
                 )
             {
-                spans.push("; ".into());
+                spans.push("；".into());
                 spans.push(move_left.into());
                 spans.push("/".into());
                 spans.push(move_right.into());
-                spans.push(" to move".into());
+                spans.push(" 移动".into());
             }
             if let Some(accept) = primary_binding(&self.keymap.accept) {
-                spans.push("; ".into());
+                spans.push("；".into());
                 spans.push(accept.into());
-                spans.push(" to confirm and close".into());
+                spans.push(" 确认并关闭".into());
             }
             if let Some(cancel) = primary_binding(&self.keymap.cancel) {
-                spans.push("; ".into());
+                spans.push("；".into());
                 spans.push(cancel.into());
-                spans.push(" to close".into());
+                spans.push(" 关闭".into());
             }
             spans
         } else {

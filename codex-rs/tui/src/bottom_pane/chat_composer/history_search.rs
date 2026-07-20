@@ -355,16 +355,16 @@ impl ChatComposer {
         ]);
         match search.status {
             HistorySearchStatus::Idle => {}
-            HistorySearchStatus::Searching => line.push_span("  searching".dim()),
+            HistorySearchStatus::Searching => line.push_span("  搜索中".dim()),
             HistorySearchStatus::Match => {
                 line.push_span("  ".dim());
                 line.push_span(Self::history_search_action_key_span(KeyCode::Enter));
-                line.push_span(" accept".dim());
+                line.push_span(" 接受".dim());
                 line.push_span(" · ".dim());
                 line.push_span(Self::history_search_action_key_span(KeyCode::Esc));
-                line.push_span(" cancel".dim());
+                line.push_span(" 取消".dim());
             }
-            HistorySearchStatus::NoMatch => line.push_span("  no match".red()),
+            HistorySearchStatus::NoMatch => line.push_span("  无匹配".red()),
         }
         Some(line)
     }

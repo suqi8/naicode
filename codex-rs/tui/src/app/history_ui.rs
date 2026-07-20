@@ -5,7 +5,7 @@
 
 use super::*;
 
-const DESKTOP_THREAD_OPENED_MESSAGE: &str = "Opened this session in Codex Desktop.";
+const DESKTOP_THREAD_OPENED_MESSAGE: &str = "已在 Codex Desktop 中打开此会话。";
 
 impl App {
     pub(super) fn insert_history_cell(&mut self, tui: &mut tui::Tui, cell: Box<dyn HistoryCell>) {
@@ -69,12 +69,12 @@ impl App {
     pub(super) fn open_url_in_browser(&mut self, url: String) {
         if let Err(err) = webbrowser::open(&url) {
             self.chat_widget
-                .add_error_message(format!("Failed to open browser for {url}: {err}"));
+                .add_error_message(format!("无法为 {url} 打开浏览器：{err}"));
             return;
         }
 
         self.chat_widget
-            .add_info_message(format!("Opened {url} in your browser."), /*hint*/ None);
+            .add_info_message(format!("已在浏览器中打开 {url}。"), /*hint*/ None);
     }
 
     pub(super) fn open_desktop_thread(&mut self, thread_id: ThreadId) {
@@ -178,9 +178,7 @@ impl App {
 }
 
 fn desktop_thread_open_error_message(err: &str) -> String {
-    format!(
-        "Failed to open this session in Codex Desktop: {err}. Install or launch Codex Desktop and try again."
-    )
+    format!("无法在 Codex Desktop 中打开此会话：{err}。请安装或启动 Codex Desktop 后重试。")
 }
 
 #[cfg(target_os = "macos")]
@@ -232,7 +230,7 @@ $url = {url}
 
 $installLocation = (Get-AppxPackage -Name OpenAI.Codex -ErrorAction SilentlyContinue).InstallLocation
 if ([string]::IsNullOrWhiteSpace($installLocation)) {{
-    Write-Error 'Codex Desktop package is not installed'
+    Write-Error '未安装 Codex Desktop 程序包'
     exit 1
 }}
 
@@ -240,11 +238,11 @@ $appDir = Join-Path $installLocation 'app'
 $exe = Join-Path $appDir 'Codex.exe'
 $app = Join-Path $appDir 'resources\app.asar'
 if (-not (Test-Path $exe)) {{
-    Write-Error "Codex Desktop executable not found at $exe"
+    Write-Error "在 $exe 未找到 Codex Desktop 可执行文件"
     exit 1
 }}
 if (-not (Test-Path $app)) {{
-    Write-Error "Codex Desktop app bundle not found at $app"
+    Write-Error "在 $app 未找到 Codex Desktop 应用包"
     exit 1
 }}
 
@@ -260,7 +258,7 @@ fn powershell_single_quoted_string(value: &str) -> String {
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn open_desktop_thread_url(_url: &str) -> Result<(), String> {
-    Err("Codex Desktop is only available on macOS and Windows".to_string())
+    Err("Codex Desktop 仅在 macOS 和 Windows 上可用".to_string())
 }
 
 #[cfg(test)]

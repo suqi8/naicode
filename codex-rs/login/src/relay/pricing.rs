@@ -4,6 +4,7 @@
 //! 重试语义；不会回退匿名价格。旧 API key/session 用户仍可使用公开 `/api/pricing`。
 
 use serde::Deserialize;
+use serde::Deserializer;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -15,6 +16,64 @@ use codex_config::types::AuthCredentialsStoreMode;
 use codex_protocol::auth::AuthMode;
 
 const USER_AGENT: &str = "naicode-cli";
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GroupRatio(String);
+
+impl GroupRatio {
+    fn parse(value: &serde_json::Value) -> Result<Self, String> {
+        let raw = match value {
+            serde_json::Value::Number(number) => number.to_string(),
+            serde_json::Value::String(value) => value.trim().to_string(),
+            _ => return Err("倍率必须是数字或数字字符串".to_string()),
+        };
+        let number = raw.parse::<f64>().map_err(|_| format!("无效倍率：{raw}"))?;
+        if !number.is_finite() || number < 0.0 {
+            return Err(format!("无效倍率：{raw}"));
+        }
+        Ok(Self(raw))
+    }
+
+    fn numeric(&self) -> f64 {
+        self.0.parse().unwrap_or(f64::INFINITY)
+    }
+
+    fn display_value(&self) -> String {
+        let raw = self.0.trim();
+        if raw.contains(['e', 'E']) {
+            return raw.to_string();
+        }
+        let trimmed = raw.trim_end_matches('0').trim_end_matches('.');
+        if trimmed.is_empty() {
+            "0".to_string()
+        } else {
+            trimmed.to_string()
+        }
+    }
+}
+
+impl From<f64> for GroupRatio {
+    fn from(value: f64) -> Self {
+        Self(value.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for GroupRatio {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Self::parse(&value).map_err(serde::de::Error::custom)
+    }
+}
+
+pub fn format_group_ratio(ratio: Option<&GroupRatio>) -> String {
+    ratio.map_or_else(
+        || "×—".to_string(),
+        |ratio| format!("×{}", ratio.display_value()),
+    )
+}
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 pub struct PricingDisplay {
@@ -35,7 +94,7 @@ pub struct PricingDisplay {
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
 pub struct EffectivePrice {
     #[serde(default)]
-    pub group_ratio: Option<f64>,
+    pub group_ratio: Option<GroupRatio>,
     #[serde(default)]
     pub basis: String,
     #[serde(default)]
@@ -94,13 +153,14 @@ pub struct PricingModel {
 pub struct GroupInfo {
     pub name: String,
     pub desc: String,
-    pub ratio: f64,
+    pub ratio: Option<GroupRatio>,
+    pub ratio_conflict: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RelayPricing {
     pub models: Vec<PricingModel>,
-    pub group_ratio: HashMap<String, f64>,
+    pub group_ratio: HashMap<String, GroupRatio>,
     pub usable_group: HashMap<String, String>,
     pub selected_group: Option<String>,
     pub display: PricingDisplay,
@@ -118,8 +178,14 @@ impl RelayPricing {
             }
         }
         names.sort_by(|a, b| {
-            let a_ratio = self.group_ratio.get(a).copied().unwrap_or(f64::INFINITY);
-            let b_ratio = self.group_ratio.get(b).copied().unwrap_or(f64::INFINITY);
+            let a_ratio = self
+                .group_ratio
+                .get(a)
+                .map_or(f64::INFINITY, GroupRatio::numeric);
+            let b_ratio = self
+                .group_ratio
+                .get(b)
+                .map_or(f64::INFINITY, GroupRatio::numeric);
             a_ratio
                 .partial_cmp(&b_ratio)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -127,10 +193,28 @@ impl RelayPricing {
         });
         names
             .into_iter()
-            .map(|name| GroupInfo {
-                ratio: self.group_ratio.get(&name).copied().unwrap_or_default(),
-                desc: self.usable_group.get(&name).cloned().unwrap_or_default(),
-                name,
+            .map(|name| {
+                let top_ratio = self.group_ratio.get(&name).cloned();
+                let model_ratios: Vec<GroupRatio> = self
+                    .models
+                    .iter()
+                    .filter_map(|model| {
+                        model
+                            .effective_prices
+                            .get(&name)
+                            .and_then(|price| price.group_ratio.clone())
+                    })
+                    .collect();
+                let ratio = top_ratio.clone().or_else(|| model_ratios.first().cloned());
+                let ratio_conflict = model_ratios
+                    .iter()
+                    .any(|model_ratio| ratio.as_ref() != Some(model_ratio));
+                GroupInfo {
+                    ratio: if ratio_conflict { None } else { ratio },
+                    ratio_conflict,
+                    desc: self.usable_group.get(&name).cloned().unwrap_or_default(),
+                    name,
+                }
             })
             .collect()
     }
@@ -331,6 +415,47 @@ mod tests {
         assert_eq!(format_price_value(Some(0.0)), "0");
         assert_eq!(format_price_value(None), "—");
         assert_eq!(format_price_value(Some(f64::NAN)), "—");
+    }
+
+    #[test]
+    fn missing_ratio_stays_missing_and_model_ratio_is_aggregated() {
+        let catalog = parse_pricing_body(serde_json::json!({
+            "data": [{
+                "model_name": "gpt-test",
+                "effective_prices": {
+                    "model-only": {"group_ratio": "0.125"},
+                    "missing": {}
+                }
+            }]
+        }))
+        .expect("catalog");
+        let groups = catalog.groups();
+        let model_only = groups
+            .iter()
+            .find(|group| group.name == "model-only")
+            .unwrap();
+        assert_eq!(format_group_ratio(model_only.ratio.as_ref()), "×0.125");
+        let missing = groups.iter().find(|group| group.name == "missing").unwrap();
+        assert_eq!(format_group_ratio(missing.ratio.as_ref()), "×—");
+    }
+
+    #[test]
+    fn conflicting_top_and_model_ratios_are_reported() {
+        let catalog = parse_pricing_body(serde_json::json!({
+            "group_ratio": {"vip": "0.5"},
+            "data": [{
+                "model_name": "gpt-test",
+                "effective_prices": {"vip": {"group_ratio": 0.75}}
+            }]
+        }))
+        .expect("catalog");
+        let vip = catalog
+            .groups()
+            .into_iter()
+            .find(|group| group.name == "vip")
+            .unwrap();
+        assert_eq!(format_group_ratio(vip.ratio.as_ref()), "×—");
+        assert!(vip.ratio_conflict);
     }
 
     #[test]

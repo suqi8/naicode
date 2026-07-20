@@ -1,5 +1,5 @@
 ---
-source: tui/src/history_cell.rs
+source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 /mcp
@@ -8,7 +8,7 @@ expression: rendered
 
   • docs
     • Status: enabled
-    • Auth: Unsupported
+    • Auth: 不支持
     • Command: docs-server
     • Env: TOKEN=*****, APP_TOKEN=*****
     • Tools: list
@@ -17,7 +17,7 @@ expression: rendered
 
   • http
     • Status: enabled
-    • Auth: Unsupported
+    • Auth: 不支持
     • URL: https://example.com/mcp
     • HTTP headers: Authorization=*****
     • Env HTTP headers: X-API-Key=API_KEY_ENV

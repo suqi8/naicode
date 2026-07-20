@@ -41,10 +41,10 @@ impl MentionType {
 
     fn label(self) -> &'static str {
         match self {
-            Self::Plugin => "Plugin",
-            Self::Skill => "Skill",
-            Self::File => "File",
-            Self::Directory => "Dir",
+            Self::Plugin => "插件",
+            Self::Skill => "技能",
+            Self::File => "文件",
+            Self::Directory => "目录",
         }
     }
 }

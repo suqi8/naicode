@@ -1,6 +1,5 @@
 ---
-source: tui/src/history_cell.rs
-assertion_line: 3310
+source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 /mcp
@@ -9,7 +8,7 @@ expression: rendered
 
   • some-server
     • Status: enabled
-    • Auth: Unsupported
+    • Auth: 不支持
     • Command: docs-server --stdio
     • Tools: lookup
     • Resources: (none)

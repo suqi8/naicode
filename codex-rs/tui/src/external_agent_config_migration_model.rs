@@ -39,8 +39,8 @@ pub(crate) fn external_agent_config_migration_groups(
     let mut groups = Vec::new();
     if !tools_and_setup.is_empty() {
         groups.push(ExternalAgentConfigMigrationGroupModel {
-            label: "Tools & setup".to_string(),
-            description: "Settings, instructions, integrations, agents, commands, and skills",
+            label: "工具与配置".to_string(),
+            description: "设置、说明、集成、智能体、命令和技能",
             item_indices: tools_and_setup,
         });
     }
@@ -52,11 +52,11 @@ pub(crate) fn external_agent_config_migration_groups(
             .len();
         groups.push(ExternalAgentConfigMigrationGroupModel {
             label: if project_count == 1 {
-                "Current project".to_string()
+                "当前项目".to_string()
             } else {
-                format!("Projects ({project_count})")
+                format!("项目（{project_count}）")
             },
-            description: "Add Codex files alongside your existing project files",
+            description: "在现有项目文件旁添加 naicode 文件",
             item_indices: projects,
         });
     }
@@ -67,8 +67,8 @@ pub(crate) fn external_agent_config_migration_groups(
             .map(|details| details.sessions.len())
             .sum::<usize>();
         groups.push(ExternalAgentConfigMigrationGroupModel {
-            label: format!("Chat sessions ({session_count})"),
-            description: "Last 30 days of chats",
+            label: format!("对话会话（{session_count}）"),
+            description: "最近 30 天的对话",
             item_indices: chat_sessions,
         });
     }
@@ -79,15 +79,15 @@ pub(crate) fn external_agent_config_migration_item_label(
     item: &ExternalAgentConfigMigrationItem,
 ) -> &'static str {
     match item.item_type {
-        ExternalAgentConfigMigrationItemType::AgentsMd => "Instructions (CLAUDE.md -> AGENTS.md)",
-        ExternalAgentConfigMigrationItemType::Config => "Settings (settings.json -> config.toml)",
-        ExternalAgentConfigMigrationItemType::Skills => "Skills",
-        ExternalAgentConfigMigrationItemType::Plugins => "Plugins",
-        ExternalAgentConfigMigrationItemType::McpServerConfig => "MCP servers",
-        ExternalAgentConfigMigrationItemType::Subagents => "Agents",
-        ExternalAgentConfigMigrationItemType::Hooks => "Hooks",
-        ExternalAgentConfigMigrationItemType::Commands => "Slash commands",
-        ExternalAgentConfigMigrationItemType::Sessions => "Recent chat sessions",
+        ExternalAgentConfigMigrationItemType::AgentsMd => "说明（CLAUDE.md -> AGENTS.md）",
+        ExternalAgentConfigMigrationItemType::Config => "设置（settings.json -> config.toml）",
+        ExternalAgentConfigMigrationItemType::Skills => "技能",
+        ExternalAgentConfigMigrationItemType::Plugins => "插件",
+        ExternalAgentConfigMigrationItemType::McpServerConfig => "MCP 服务器",
+        ExternalAgentConfigMigrationItemType::Subagents => "智能体",
+        ExternalAgentConfigMigrationItemType::Hooks => "钩子",
+        ExternalAgentConfigMigrationItemType::Commands => "斜杠命令",
+        ExternalAgentConfigMigrationItemType::Sessions => "最近的对话会话",
     }
 }
 
@@ -95,15 +95,15 @@ pub(crate) fn external_agent_config_migration_type_label(
     item_type: ExternalAgentConfigMigrationItemType,
 ) -> &'static str {
     match item_type {
-        ExternalAgentConfigMigrationItemType::AgentsMd => "Instructions",
-        ExternalAgentConfigMigrationItemType::Config => "Settings",
-        ExternalAgentConfigMigrationItemType::Skills => "Skills",
-        ExternalAgentConfigMigrationItemType::Plugins => "Plugins",
-        ExternalAgentConfigMigrationItemType::McpServerConfig => "MCP servers",
-        ExternalAgentConfigMigrationItemType::Subagents => "Agents",
-        ExternalAgentConfigMigrationItemType::Hooks => "Hooks",
-        ExternalAgentConfigMigrationItemType::Commands => "Slash commands",
-        ExternalAgentConfigMigrationItemType::Sessions => "Chat sessions",
+        ExternalAgentConfigMigrationItemType::AgentsMd => "说明",
+        ExternalAgentConfigMigrationItemType::Config => "设置",
+        ExternalAgentConfigMigrationItemType::Skills => "技能",
+        ExternalAgentConfigMigrationItemType::Plugins => "插件",
+        ExternalAgentConfigMigrationItemType::McpServerConfig => "MCP 服务器",
+        ExternalAgentConfigMigrationItemType::Subagents => "智能体",
+        ExternalAgentConfigMigrationItemType::Hooks => "钩子",
+        ExternalAgentConfigMigrationItemType::Commands => "斜杠命令",
+        ExternalAgentConfigMigrationItemType::Sessions => "对话会话",
     }
 }
 
@@ -136,7 +136,7 @@ pub(crate) fn external_agent_config_migration_count_summary<'a>(
             )
         })
         .collect::<Vec<_>>()
-        .join(", ")
+        .join("，")
 }
 
 pub(crate) fn external_agent_config_migration_item_count(
@@ -188,12 +188,12 @@ pub(crate) fn external_agent_config_migration_item_detail(
     match item.item_type {
         ExternalAgentConfigMigrationItemType::Plugins => None,
         ExternalAgentConfigMigrationItemType::Skills => Some(format_counted_details(
-            "skill",
+            "个技能",
             details.skills.len(),
             details.skills.iter().map(|skill| skill.name.as_str()),
         )),
         ExternalAgentConfigMigrationItemType::McpServerConfig => Some(format_counted_details(
-            "MCP server",
+            "个 MCP 服务器",
             details.mcp_servers.len(),
             details
                 .mcp_servers
@@ -201,22 +201,22 @@ pub(crate) fn external_agent_config_migration_item_detail(
                 .map(|server| server.name.as_str()),
         )),
         ExternalAgentConfigMigrationItemType::Subagents => Some(format_counted_details(
-            "agent",
+            "个智能体",
             details.subagents.len(),
             details.subagents.iter().map(|agent| agent.name.as_str()),
         )),
         ExternalAgentConfigMigrationItemType::Hooks => Some(format_counted_details(
-            "hook",
+            "个钩子",
             details.hooks.len(),
             details.hooks.iter().map(|hook| hook.name.as_str()),
         )),
         ExternalAgentConfigMigrationItemType::Commands => Some(format_counted_details(
-            "slash command",
+            "个斜杠命令",
             details.commands.len(),
             details.commands.iter().map(|command| command.name.as_str()),
         )),
         ExternalAgentConfigMigrationItemType::Sessions => Some(format_counted_details(
-            "chat session",
+            "个对话会话",
             details.sessions.len(),
             details
                 .sessions
@@ -233,9 +233,8 @@ fn format_counted_details<'a>(
     count: usize,
     names: impl Iterator<Item = &'a str>,
 ) -> String {
-    let suffix = if count == 1 { "" } else { "s" };
     match names.take(4).collect::<Vec<_>>() {
-        names if names.is_empty() => format!("{count} {noun}{suffix}"),
-        names => format!("{count} {noun}{suffix}: {}", names.join(", ")),
+        names if names.is_empty() => format!("{count} {noun}"),
+        names => format!("{count} {noun}：{}", names.join("，")),
     }
 }

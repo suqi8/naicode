@@ -152,6 +152,7 @@ pub(crate) mod onboarding;
 mod oss_selection;
 mod pager_overlay;
 mod permission_compat;
+mod product_palette;
 pub(crate) mod public_widgets;
 mod render;
 mod resize_reflow_cap;
@@ -881,7 +882,7 @@ pub async fn run_main(
         Ok(v) => v,
         #[allow(clippy::print_stderr)]
         Err(e) => {
-            eprintln!("Error parsing -c overrides: {e}");
+            eprintln!("解析 -c 覆盖项出错：{e}");
             std::process::exit(1);
         }
     };
@@ -891,7 +892,7 @@ pub async fn run_main(
     let codex_home = match find_codex_home() {
         Ok(codex_home) => codex_home.to_path_buf(),
         Err(err) => {
-            eprintln!("Error finding codex home: {err}");
+            eprintln!("查找 codex 主目录出错：{err}");
             std::process::exit(1);
         }
     };
@@ -1148,7 +1149,7 @@ pub async fn run_main(
     ) {
         #[allow(clippy::print_stderr)]
         {
-            eprintln!("Error adding directories: {warning}");
+            eprintln!("添加目录出错：{warning}");
             std::process::exit(1);
         }
     }
@@ -1677,6 +1678,9 @@ async fn run_ratatui_app(
     ) {
         config.startup_warnings.push(w);
     }
+    if let Some(warning) = crate::product_palette::configure(config.tui_product_accent.as_deref()) {
+        config.startup_warnings.push(warning);
+    }
 
     set_default_client_residency_requirement(config.enforce_residency.value());
     let should_show_trust_screen = should_show_trust_screen(&config);
@@ -1804,9 +1808,7 @@ async fn run_ratatui_app(
 )]
 fn restore() {
     if let Err(err) = tui::restore_after_exit() {
-        eprintln!(
-            "failed to restore terminal. Run `reset` or restart your terminal to recover: {err}"
-        );
+        eprintln!("恢复终端失败。请运行 `reset` 或重启终端以恢复：{err}");
     }
 }
 
@@ -1922,7 +1924,7 @@ async fn load_config_or_exit_with_fallback_cwd(
     {
         Ok(config) => config,
         Err(err) => {
-            eprintln!("Error loading configuration: {err}");
+            eprintln!("加载配置出错：{err}");
             std::process::exit(1);
         }
     }
@@ -1957,11 +1959,11 @@ async fn load_bootstrap_config_or_exit(
                 .map(ConfigLoadError::config_error);
             if let Some(config_error) = config_error {
                 eprintln!(
-                    "Error loading config.toml:\n{}",
+                    "加载 config.toml 出错：\n{}",
                     format_config_error_with_source(config_error)
                 );
             } else {
-                eprintln!("Error loading config.toml: {err}");
+                eprintln!("加载 config.toml 出错：{err}");
             }
             std::process::exit(1);
         }

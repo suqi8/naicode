@@ -137,7 +137,7 @@ use uuid::Uuid;
 const JSONRPC_INVALID_REQUEST: i64 = -32600;
 const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 pub(crate) const EXTERNAL_AGENT_CONFIG_IMPORT_IN_PROGRESS_MESSAGE: &str =
-    "A previous Claude Code import is still running. Wait for it to finish before importing again.";
+    "上一次 Claude Code 导入仍在进行中。请等待其完成后再重新导入。";
 const THREAD_SETTINGS_UPDATE_METHOD: &str = "thread/settings/update";
 
 fn bootstrap_request_error(context: &'static str, err: TypedRequestError) -> color_eyre::Report {
@@ -324,6 +324,7 @@ impl AppServerSession {
             Some(Account::ApiKey {}) => (
                 None,
                 Some(TelemetryAuthMode::ApiKey),
+                // 手动 API key 是独立高级备用入口，不能伪装成 OAuth 已登录状态。
                 Some(StatusAccountDisplay::ApiKey),
                 None,
                 FeedbackAudience::External,
@@ -1200,6 +1201,9 @@ pub(crate) fn status_account_display_from_auth_mode(
 ) -> Option<StatusAccountDisplay> {
     match auth_mode {
         Some(AuthMode::ApiKey) => Some(StatusAccountDisplay::ApiKey),
+        Some(AuthMode::RelayOAuthTokens) => {
+            Some(StatusAccountDisplay::RelayOAuth { account_name: None })
+        }
         Some(AuthMode::Chatgpt)
         | Some(AuthMode::ChatgptAuthTokens)
         | Some(AuthMode::AgentIdentity)

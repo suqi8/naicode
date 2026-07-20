@@ -1,9 +1,9 @@
 ---
-source: tui/src/history_cell.rs
+source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 /ps
 
-Background terminals
+后台终端
 
-  • No background terminals running.
+  • 没有正在运行的后台终端。

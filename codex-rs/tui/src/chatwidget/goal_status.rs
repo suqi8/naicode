@@ -84,7 +84,7 @@ fn active_goal_usage(
 fn stopped_goal_budget_usage(token_budget: Option<i64>, tokens_used: i64) -> Option<String> {
     token_budget.map(|token_budget| {
         format!(
-            "{} / {} tokens",
+            "{} / {} 词元",
             format_tokens_compact(tokens_used),
             format_tokens_compact(token_budget)
         )
@@ -97,7 +97,7 @@ fn completed_goal_usage(
     time_used_seconds: i64,
 ) -> String {
     if token_budget.is_some() {
-        return format!("{} tokens", format_tokens_compact(tokens_used));
+        return format!("{} 词元", format_tokens_compact(tokens_used));
     }
 
     format_goal_elapsed_seconds(time_used_seconds)
@@ -142,7 +142,7 @@ mod tests {
     fn stopped_goal_budget_usage_reports_budgeted_tokens() {
         assert_eq!(
             stopped_goal_budget_usage(Some(50_000), /*tokens_used*/ 63_876),
-            Some("63.9K / 50K tokens".to_string())
+            Some("63.9K / 50K 词元".to_string())
         );
     }
 
@@ -162,7 +162,7 @@ mod tests {
                 /*tokens_used*/ 40_000,
                 /*time_used_seconds*/ 120,
             ),
-            "40K tokens".to_string()
+            "40K 词元".to_string()
         );
     }
 

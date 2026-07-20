@@ -1,9 +1,12 @@
 use chrono::Utc;
+use once_cell::sync::Lazy;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use serde::Serialize;
 #[cfg(test)]
 use serial_test::serial;
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use std::fmt::Debug;
 use std::future::Future;
@@ -17,6 +20,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::time::Instant;
+use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::Semaphore;
 use tokio::sync::watch;
 use tracing::instrument;
@@ -279,6 +283,46 @@ pub enum RefreshTokenError {
     Transient(#[from] std::io::Error),
 }
 
+#[derive(Debug)]
+struct RelayRefreshCoordinator {
+    lock: Semaphore,
+    consumed_refresh_tokens: AsyncMutex<HashSet<String>>,
+}
+
+impl RelayRefreshCoordinator {
+    fn new() -> Self {
+        Self {
+            lock: Semaphore::new(1),
+            consumed_refresh_tokens: AsyncMutex::new(HashSet::new()),
+        }
+    }
+}
+
+static RELAY_REFRESH_COORDINATORS: Lazy<Mutex<HashMap<String, Arc<RelayRefreshCoordinator>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn relay_refresh_coordinator(codex_home: &Path) -> Arc<RelayRefreshCoordinator> {
+    let normalized = codex_home
+        .canonicalize()
+        .unwrap_or_else(|_| codex_home.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    let mut registry = RELAY_REFRESH_COORDINATORS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    Arc::clone(
+        registry
+            .entry(normalized)
+            .or_insert_with(|| Arc::new(RelayRefreshCoordinator::new())),
+    )
+}
+
+fn refresh_token_digest(token: &str) -> String {
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(token.as_bytes()))
+}
+
 #[derive(Debug, Error)]
 pub enum RelayRequestError {
     #[error("尚未登录酸奶中转站，请先运行 `naicode login`")]
@@ -287,6 +331,8 @@ pub enum RelayRequestError {
     InvalidCredentials,
     #[error("酸奶中转站登录已失效，请重新登录")]
     ReauthenticationRequired,
+    #[error("酸奶中转站刷新凭据发生并发冲突，请稍后重试")]
+    RefreshConflictUnresolved,
     #[error("连接酸奶中转站失败: {0}")]
     Network(String),
     #[error("酸奶中转站拒绝了请求（HTTP {status}）")]
@@ -299,6 +345,7 @@ impl RelayRequestError {
             Self::NotLoggedIn => "not_logged_in",
             Self::InvalidCredentials => "invalid_credentials",
             Self::ReauthenticationRequired => "reauthentication_required",
+            Self::RefreshConflictUnresolved => "refresh_conflict_unresolved",
             Self::Network(_) => "network",
             Self::Http { .. } => "http",
         }
@@ -309,6 +356,11 @@ impl From<RefreshTokenError> for RelayRequestError {
     fn from(error: RefreshTokenError) -> Self {
         match error {
             RefreshTokenError::Permanent(_) => Self::ReauthenticationRequired,
+            RefreshTokenError::Transient(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock =>
+            {
+                Self::RefreshConflictUnresolved
+            }
             RefreshTokenError::Transient(error) => Self::Network(error.to_string()),
         }
     }
@@ -1501,17 +1553,23 @@ async fn request_and_persist_relay_refresh(auth: &RelayOAuthAuth) -> Result<(), 
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        let permanent = status == StatusCode::UNAUTHORIZED
-            || status == StatusCode::BAD_REQUEST && body.contains("invalid_grant");
-        if permanent {
-            return Err(RefreshTokenError::Permanent(RefreshTokenFailedError::new(
-                RefreshTokenFailedReason::Revoked,
-                "酸奶中转站登录已失效，请重新登录。".to_string(),
-            )));
-        }
-        return Err(RefreshTokenError::Transient(std::io::Error::other(
-            format!("刷新酸奶中转站登录失败: {status}"),
-        )));
+        return match classify_relay_refresh_failure(&body) {
+            RelayRefreshFailure::Revoked => {
+                Err(RefreshTokenError::Permanent(RefreshTokenFailedError::new(
+                    RefreshTokenFailedReason::Revoked,
+                    "酸奶中转站登录已失效，请重新登录。".to_string(),
+                )))
+            }
+            RelayRefreshFailure::Conflict => {
+                Err(RefreshTokenError::Transient(std::io::Error::new(
+                    std::io::ErrorKind::WouldBlock,
+                    "refresh token was already consumed",
+                )))
+            }
+            RelayRefreshFailure::Other => Err(RefreshTokenError::Transient(std::io::Error::other(
+                format!("刷新酸奶中转站登录失败: {status}"),
+            ))),
+        };
     }
     let refreshed = response
         .json::<RelayRefreshResponse>()
@@ -1528,6 +1586,63 @@ async fn request_and_persist_relay_refresh(auth: &RelayOAuthAuth) -> Result<(), 
     })
     .map_err(RefreshTokenError::Transient)?;
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelayRefreshFailure {
+    Revoked,
+    Conflict,
+    Other,
+}
+
+fn classify_relay_refresh_failure(body: &str) -> RelayRefreshFailure {
+    fn collect_strings(value: &Value, output: &mut Vec<String>) {
+        match value {
+            Value::String(value) => output.push(value.to_ascii_lowercase()),
+            Value::Object(map) => {
+                for key in [
+                    "error",
+                    "code",
+                    "error_code",
+                    "error_description",
+                    "message",
+                ] {
+                    if let Some(value) = map.get(key) {
+                        collect_strings(value, output);
+                    }
+                }
+            }
+            Value::Array(values) => {
+                for value in values {
+                    collect_strings(value, output);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut values = Vec::new();
+    if let Ok(value) = serde_json::from_str::<Value>(body) {
+        collect_strings(&value, &mut values);
+    } else if !body.trim().is_empty() {
+        values.push(body.to_ascii_lowercase());
+    }
+    if values.iter().any(|value| {
+        ["device_revoked", "session_revoked", "refresh_token_revoked"]
+            .iter()
+            .any(|code| value.contains(code))
+    }) {
+        RelayRefreshFailure::Revoked
+    } else if values.iter().any(|value| {
+        value.contains("refresh_token_reused")
+            || value.contains("invalid_grant")
+            || value.contains("already used")
+            || value.contains("already consumed")
+    }) {
+        RelayRefreshFailure::Conflict
+    } else {
+        RelayRefreshFailure::Other
+    }
 }
 
 // Requests refreshed ChatGPT OAuth tokens from the auth service using a refresh token.
@@ -1980,6 +2095,7 @@ pub struct AuthManager {
     chatgpt_base_url: Option<String>,
     agent_identity_authapi_base_url: Option<String>,
     refresh_lock: Semaphore,
+    relay_refresh_coordinator: Arc<RelayRefreshCoordinator>,
     agent_identity_lock: Semaphore,
     agent_identity_bootstrap_cooldown: Mutex<AgentIdentityBootstrapCooldown>,
     external_auth: RwLock<Option<Arc<dyn ExternalAuth>>>,
@@ -2068,6 +2184,7 @@ impl AuthManager {
         .ok()
         .flatten();
         let (auth_change_tx, _auth_change_rx) = watch::channel(0);
+        let relay_refresh_coordinator = relay_refresh_coordinator(&codex_home);
         Self {
             codex_home,
             inner: RwLock::new(CachedAuth {
@@ -2082,6 +2199,7 @@ impl AuthManager {
             chatgpt_base_url,
             agent_identity_authapi_base_url,
             refresh_lock: Semaphore::new(/*permits*/ 1),
+            relay_refresh_coordinator,
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
@@ -2108,6 +2226,7 @@ impl AuthManager {
             chatgpt_base_url: None,
             agent_identity_authapi_base_url: default_agent_identity_authapi_base_url(),
             refresh_lock: Semaphore::new(/*permits*/ 1),
+            relay_refresh_coordinator: relay_refresh_coordinator(Path::new("non-existent")),
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
@@ -2122,6 +2241,7 @@ impl AuthManager {
             permanent_refresh_failure: None,
         };
         let (auth_change_tx, _auth_change_rx) = watch::channel(0);
+        let relay_refresh_coordinator = relay_refresh_coordinator(&codex_home);
         Arc::new(Self {
             codex_home,
             inner: RwLock::new(cached),
@@ -2133,6 +2253,7 @@ impl AuthManager {
             chatgpt_base_url: None,
             agent_identity_authapi_base_url: default_agent_identity_authapi_base_url(),
             refresh_lock: Semaphore::new(/*permits*/ 1),
+            relay_refresh_coordinator,
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
@@ -2166,6 +2287,7 @@ impl AuthManager {
                     .to_string(),
             ),
             refresh_lock: Semaphore::new(/*permits*/ 1),
+            relay_refresh_coordinator: relay_refresh_coordinator(Path::new("non-existent")),
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(None),
@@ -2189,6 +2311,7 @@ impl AuthManager {
             chatgpt_base_url: None,
             agent_identity_authapi_base_url: default_agent_identity_authapi_base_url(),
             refresh_lock: Semaphore::new(/*permits*/ 1),
+            relay_refresh_coordinator: relay_refresh_coordinator(Path::new("non-existent")),
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
             external_auth: RwLock::new(Some(
@@ -2570,12 +2693,71 @@ impl AuthManager {
         Ok(auth)
     }
 
+    async fn refresh_relay_guarded(&self, expected: &CodexAuth) -> Result<(), RefreshTokenError> {
+        let coordinator = Arc::clone(&self.relay_refresh_coordinator);
+        let _guard = coordinator.lock.acquire().await.map_err(|_| {
+            RefreshTokenError::Transient(std::io::Error::other("relay refresh coordinator closed"))
+        })?;
+        if self.reload_relay_auth(expected).await? {
+            return Ok(());
+        }
+        let current = self.auth_cached().ok_or_else(|| {
+            RefreshTokenError::Transient(std::io::Error::other("relay OAuth 凭据缺失"))
+        })?;
+        let CodexAuth::RelayOAuth(relay_auth) = &current else {
+            return Err(RefreshTokenError::Transient(std::io::Error::other(
+                "relay OAuth 凭据缺失",
+            )));
+        };
+        let refresh_token = relay_auth
+            .tokens()
+            .map_err(RefreshTokenError::Transient)?
+            .refresh_token;
+        let digest = refresh_token_digest(&refresh_token);
+        if coordinator
+            .consumed_refresh_tokens
+            .lock()
+            .await
+            .contains(&digest)
+        {
+            if self.reload_relay_auth(&current).await? {
+                return Ok(());
+            }
+            return Err(RefreshTokenError::Transient(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                "refresh token was already consumed",
+            )));
+        }
+        match self.refresh_token_from_authority_impl().await {
+            Ok(()) => Ok(()),
+            Err(error @ RefreshTokenError::Permanent(_)) => {
+                if self.reload_relay_auth(&current).await? {
+                    return Ok(());
+                }
+                Err(error)
+            }
+            Err(RefreshTokenError::Transient(error))
+                if error.kind() == std::io::ErrorKind::WouldBlock =>
+            {
+                if self.reload_relay_auth(&current).await? {
+                    return Ok(());
+                }
+                coordinator
+                    .consumed_refresh_tokens
+                    .lock()
+                    .await
+                    .insert(digest);
+                Err(RefreshTokenError::Transient(error))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     async fn reload_relay_auth(&self, expected: &CodexAuth) -> Result<bool, RefreshTokenError> {
         let loaded = self.load_auth().await;
         let Some(CodexAuth::RelayOAuth(_)) = loaded.as_ref() else {
-            return Err(RefreshTokenError::Permanent(RefreshTokenFailedError::new(
-                RefreshTokenFailedReason::Revoked,
-                "酸奶中转站登录已失效，请重新登录。".to_string(),
+            return Err(RefreshTokenError::Transient(std::io::Error::other(
+                "酸奶中转站认证状态已变化",
             )));
         };
         let changed = !Self::auths_equal_for_refresh(Some(expected), loaded.as_ref());
@@ -2597,7 +2779,7 @@ impl AuthManager {
     {
         let mut auth = self.auth_cached().ok_or(RelayRequestError::NotLoggedIn)?;
         if Self::should_refresh_proactively(&auth) {
-            self.refresh_token().await?;
+            self.refresh_relay_guarded(&auth).await?;
             auth = self
                 .auth_cached()
                 .ok_or(RelayRequestError::ReauthenticationRequired)?;
@@ -2623,15 +2805,7 @@ impl AuthManager {
             return Ok(response);
         }
 
-        let _refresh_guard = self
-            .refresh_lock
-            .acquire()
-            .await
-            .map_err(|_| RelayRequestError::ReauthenticationRequired)?;
-        let changed = self.reload_relay_auth(&auth).await?;
-        if !changed {
-            self.refresh_token_from_authority_impl().await?;
-        }
+        self.refresh_relay_guarded(&auth).await?;
         let retry_auth = self
             .auth_cached()
             .ok_or(RelayRequestError::ReauthenticationRequired)?;
@@ -2652,13 +2826,16 @@ impl AuthManager {
     /// we can assume that the source already refreshed it. Otherwise, ask the
     /// token authority to refresh.
     pub async fn refresh_token(&self) -> Result<(), RefreshTokenError> {
+        let auth_before_reload = self.auth_cached();
+        if let Some(auth @ CodexAuth::RelayOAuth(_)) = auth_before_reload.as_ref() {
+            return self.refresh_relay_guarded(auth).await;
+        }
         let _refresh_guard = self.refresh_lock.acquire().await.map_err(|_| {
             RefreshTokenError::Permanent(RefreshTokenFailedError::new(
                 RefreshTokenFailedReason::Other,
                 REFRESH_TOKEN_UNKNOWN_MESSAGE.to_string(),
             ))
         })?;
-        let auth_before_reload = self.auth_cached();
         if auth_before_reload
             .as_ref()
             .is_some_and(|auth| auth.is_api_key_auth() || auth.is_personal_access_token_auth())
@@ -2738,7 +2915,9 @@ impl AuthManager {
             }
         };
         if let Err(RefreshTokenError::Permanent(error)) = &result {
-            self.record_permanent_refresh_failure_if_unchanged(&attempted_auth, error);
+            if !matches!(attempted_auth, CodexAuth::RelayOAuth(_)) {
+                self.record_permanent_refresh_failure_if_unchanged(&attempted_auth, error);
+            }
         }
         result
     }

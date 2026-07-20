@@ -1,0 +1,66 @@
+<style>
+  :root{--bg:#0b1118;--panel:#101a24;--line:#29455d;--accent:#79c8ff;--accent2:#b7e2ff;--text:#e8f4fc;--muted:#8197a8;--soft:#152738}
+  .note{max-width:1160px;margin:0 auto 20px;padding:14px 17px;background:#eaf6ff;border:1px solid #9bd2f7;border-radius:10px;color:#173b53}
+  .screen{max-width:1160px;margin:22px auto 38px}.screen h3{margin-bottom:6px}.sub{color:#6b7280;margin-bottom:12px}
+  .term{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 38px rgba(5,20,32,.18);font:14px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;overflow:hidden}.body{padding:24px;min-height:410px}.muted{color:var(--muted)}.accent{color:var(--accent)}.bright{color:var(--accent2)}.ok{color:#7de0b3}.rule{height:1px;background:var(--line);margin:14px 0}.input{margin:0 22px 13px;border:1px solid #47799f;border-radius:9px;padding:12px 14px}.foot{display:flex;justify-content:space-between;padding:0 22px 14px;color:var(--muted);font-size:12px}
+  .welcome{display:flex;flex-direction:column;align-items:center;text-align:center;padding:28px 0 38px}.logo{white-space:pre;text-align:left;color:var(--accent);font-weight:700;line-height:1.05;font-size:15px;text-shadow:0 0 18px rgba(121,200,255,.18)}.tagline{margin-top:16px;color:var(--accent2)}.session{margin-top:21px;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:11px 18px;color:var(--muted)}
+  .dialog{padding:20px 22px}.dialog-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}.steps{font-size:12px;color:var(--muted)}.steps b{color:var(--accent)}.layout{display:grid;grid-template-columns:175px 1fr;gap:17px}.groups{border-right:1px solid var(--line);padding-right:13px}.group{padding:8px 10px;border-radius:6px;margin:3px 0}.selected{background:var(--soft);color:var(--accent2);outline:1px solid #3d6e92}.models{display:flex;flex-direction:column;gap:7px}.model{border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:#0e1720}.model.selected{background:#132536}.model-head{display:flex;justify-content:space-between;gap:12px}.prices{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:3px 14px;margin-top:6px;color:#9cb4c5;font-size:12px}.price{color:#b8ddf5}.badge{border:1px solid #3e708f;border-radius:999px;padding:0 7px;color:var(--accent);font-size:11px;white-space:nowrap}
+  .palette{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.theme{border:1px solid #cbd5e1;border-radius:8px;padding:12px;background:white}.swatches{display:flex;gap:6px;margin-top:8px}.dot{width:24px;height:24px;border-radius:50%;border:1px solid rgba(0,0,0,.12)}
+</style>
+
+<h2 style="max-width:1160px;margin:0 auto 8px">naicode TUI · 第二版调整</h2>
+<div class="note"><b>已按你的反馈修改：</b>主界面取消常驻 topbar；新对话改为符号字体欢迎页；模型列表中每一个模型都显示自己的完整价格，而不是只展开选中项；默认主题色改为浅蓝色，并预留轻量主题色配置。</div>
+
+<div class="screen">
+  <h3>① 新对话开头</h3><div class="sub">没有常驻顶栏。欢迎信息只在新会话开始时出现，开始对话后自然滚出视野。</div>
+  <div class="term">
+    <div class="body">
+      <div class="welcome">
+        <div class="logo">███╗   ██╗  █████╗  ██╗  ██████╗  ██████╗ ██████╗ ███████╗
+████╗  ██║ ██╔══██╗ ██║ ██╔════╝ ██╔═══██╗██╔══██╗██╔════╝
+██╔██╗ ██║ ███████║ ██║ ██║      ██║   ██║██║  ██║█████╗
+██║╚██╗██║ ██╔══██║ ██║ ██║      ██║   ██║██║  ██║██╔══╝
+██║ ╚████║ ██║  ██║ ██║ ╚██████╗ ╚██████╔╝██████╔╝███████╗
+╚═╝  ╚═══╝ ╚═╝  ╚═╝ ╚═╝  ╚═════╝  ╚═════╝ ╚═════╝ ╚══════╝</div>
+        <div class="tagline">🥛 酸奶中转站 · 让模型选择和编码工作更简单</div>
+        <div class="session"><span class="bright">gpt-5.6-sol</span>　·　default 分组　·　思考等级：低<br><span class="muted">D:\AndroidStudioProjects　　输入 /model 可随时切换</span></div>
+      </div>
+    </div>
+    <div class="input">› 输入任务，或输入 / 查看命令</div>
+    <div class="foot"><span>本地目录可读 · 执行操作前询问</span><span>/model　/status　/account</span></div>
+  </div>
+</div>
+
+<div class="screen">
+  <h3>② 选择分组与模型</h3><div class="sub">所有模型始终显示完整价格；选中状态只负责高亮，不负责决定价格是否可见。</div>
+  <div class="term">
+    <div class="dialog">
+      <div class="dialog-title"><b class="bright">模型与分组</b><span class="steps"><b>1 选择模型</b>　›　2 思考等级　›　3 应用</span></div>
+      <div class="layout">
+        <div class="groups"><div class="muted" style="padding:4px 9px">可用分组</div><div class="group selected">› default　1.0×</div><div class="group">　vip　　 0.8×</div><div class="group">　绘图组　 1.0×</div></div>
+        <div class="models">
+          <div class="model"><div class="model-head"><b>gpt-5.6-terra</b><span class="badge">文本 · 推理</span></div><div class="prices"><span>输入 <b class="price">¥0.10</b></span><span>输出 <b class="price">¥0.80</b></span><span>缓存读取 <b class="price">¥0.01</b></span><span>缓存创建 <b class="price">¥0.13</b></span><span>图片输入 —</span><span>音频输入 —</span><span>音频输出 —</span><span>/1M tokens</span></div></div>
+          <div class="model"><div class="model-head"><b>gpt-5.6-luna</b><span class="badge">文本 · 推理</span></div><div class="prices"><span>输入 <b class="price">¥0.04</b></span><span>输出 <b class="price">¥0.32</b></span><span>缓存读取 <b class="price">¥0.004</b></span><span>缓存创建 <b class="price">¥0.05</b></span><span>图片输入 —</span><span>音频输入 —</span><span>音频输出 —</span><span>/1M tokens</span></div></div>
+          <div class="model selected"><div class="model-head"><b>› gpt-5.6-sol</b><span class="badge">当前选择</span></div><div class="prices"><span>输入 <b class="price">¥0.20</b></span><span>输出 <b class="price">¥1.60</b></span><span>缓存读取 <b class="price">¥0.02</b></span><span>缓存创建 <b class="price">¥0.25</b></span><span>图片输入 —</span><span>音频输入 —</span><span>音频输出 —</span><span>/1M tokens</span></div></div>
+          <div class="model"><div class="model-head"><b>gpt-image-1.5</b><span class="badge">图片</span></div><div class="prices"><span>输入 <b class="price">¥0.20</b></span><span>输出 <b class="price">¥0.40</b></span><span>缓存读取 <b class="price">—</b></span><span>缓存创建 <b class="price">—</b></span><span>图片输入 <b class="price">¥0.80</b></span><span>音频输入 —</span><span>按次 <b class="price">¥0.12</b></span><span>实际单位由服务端返回</span></div></div>
+        </div>
+      </div>
+      <div class="rule"></div><div class="foot" style="padding:0"><span>↑↓ 选择模型　←→ 切换分组　Enter 下一步　Esc 返回</span><span>价格与网站一致</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen">
+  <h3>③ 主题色配置</h3><div class="sub">只替换一组语义颜色变量，不重做布局，改动较小。默认使用浅蓝色。</div>
+  <div class="palette">
+    <div class="theme" style="outline:2px solid #79c8ff"><b>浅蓝（默认）</b><div class="swatches"><i class="dot" style="background:#79c8ff"></i><i class="dot" style="background:#b7e2ff"></i><i class="dot" style="background:#152738"></i></div></div>
+    <div class="theme"><b>奶绿</b><div class="swatches"><i class="dot" style="background:#76d7ad"></i><i class="dot" style="background:#c4f1dc"></i><i class="dot" style="background:#173229"></i></div></div>
+    <div class="theme"><b>薰衣草</b><div class="swatches"><i class="dot" style="background:#c1a7ff"></i><i class="dot" style="background:#e4d9ff"></i><i class="dot" style="background:#29213b"></i></div></div>
+    <div class="theme"><b>自定义</b><div style="margin-top:9px;color:#64748b">配置一个主色，自动推导高亮、边框和选中背景。</div></div>
+  </div>
+</div>
+
+<div class="options" style="max-width:1160px;margin:0 auto">
+  <div class="option" data-choice="v3-approved" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>这个结构正确</h3><p>继续细化欢迎页、模型弹层和思考等级弹层。</p></div></div>
+  <div class="option" data-choice="v3-logo-change" onclick="toggleSelect(this)"><div class="letter">B</div><div class="content"><h3>符号字体还要调整</h3><p>结构可以，但欢迎页 Logo 的字形或内容需要换一种。</p></div></div>
+</div>

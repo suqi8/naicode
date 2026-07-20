@@ -50,13 +50,13 @@ pub(crate) fn action_summary(action: &GuardianAssessmentAction) -> String {
         }
         GuardianAssessmentAction::ApplyPatch { files, .. } => {
             if files.len() == 1 {
-                format!("apply_patch touching {}", files[0].display())
+                format!("apply_patch 修改 {}", files[0].display())
             } else {
-                format!("apply_patch touching {} files", files.len())
+                format!("apply_patch 修改 {} 个文件", files.len())
             }
         }
         GuardianAssessmentAction::NetworkAccess { target, .. } => {
-            format!("network access to {target}")
+            format!("网络访问 {target}")
         }
         GuardianAssessmentAction::McpToolCall {
             server,
@@ -65,12 +65,12 @@ pub(crate) fn action_summary(action: &GuardianAssessmentAction) -> String {
             ..
         } => {
             let label = connector_name.as_deref().unwrap_or(server.as_str());
-            format!("MCP {tool_name} on {label}")
+            format!("在 {label} 上调用 MCP {tool_name}")
         }
         GuardianAssessmentAction::RequestPermissions { reason, .. } => reason
             .as_deref()
-            .map(|reason| format!("permission request: {reason}"))
-            .unwrap_or_else(|| "permission request".to_string()),
+            .map(|reason| format!("权限请求：{reason}"))
+            .unwrap_or_else(|| "权限请求".to_string()),
     }
 }
 

@@ -14,9 +14,10 @@ use ratatui::prelude::Stylize as _;
 use ratatui::text::Line;
 
 pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_NO_ITEMS_MESSAGE: &str =
-    "No Claude Code setup was found to import.";
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_REMOTE_UNAVAILABLE_MESSAGE: &str = "Import from Claude Code is unavailable in remote sessions. Start Codex locally and run /import.";
-pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_DAEMON_UNAVAILABLE_MESSAGE: &str = "Import from Claude Code is unavailable while Codex is connected to the local app-server daemon. Stop the daemon, restart Codex, and run /import.";
+    "未找到可导入的 Claude Code 配置。";
+pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_REMOTE_UNAVAILABLE_MESSAGE: &str =
+    "远程会话中无法从 Claude Code 导入。请在本地启动 naicode 并运行 /import。";
+pub(crate) const EXTERNAL_AGENT_CONFIG_MIGRATION_DAEMON_UNAVAILABLE_MESSAGE: &str = "naicode 连接到本地 app-server 守护进程时无法从 Claude Code 导入。请停止守护进程，重启 naicode，然后运行 /import。";
 
 pub(crate) enum ExternalAgentConfigMigrationFlowOutcome {
     Started(Vec<Line<'static>>),
@@ -89,12 +90,12 @@ fn external_agent_config_migration_started_lines(
     let mut lines = vec![
         vec![
             "• ".dim(),
-            "Claude Code import started.".cyan(),
-            " You can keep working while it finishes.".into(),
+            "Claude Code 导入已开始。".cyan(),
+            " 导入过程中你可以继续操作。".into(),
         ]
         .into(),
-        vec!["  ".into(), "Imported setup will apply to new chats.".dim()].into(),
-        vec!["  ".into(), "Importing:".cyan().bold()].into(),
+        vec!["  ".into(), "导入的配置将应用于新的对话。".dim()].into(),
+        vec!["  ".into(), "正在导入：".cyan().bold()].into(),
     ];
     lines.extend(
         import_summaries
@@ -111,7 +112,7 @@ fn external_agent_config_migration_started_lines(
                     let mut name_summary = shown_names.join(", ");
                     if names.len() > shown_names.len() {
                         name_summary
-                            .push_str(&format!(", +{} more", names.len() - shown_names.len()));
+                            .push_str(&format!("，另有 {} 项", names.len() - shown_names.len()));
                     }
                     line.extend([" — ".dim(), name_summary.into()]);
                 }
@@ -138,25 +139,25 @@ pub(crate) fn external_agent_config_migration_finished_lines(
         .map(|type_result| type_result.failures.len())
         .sum::<usize>();
     let failed_count = if failed_count == 0 {
-        format!("{failed_count} failed").green()
+        format!("{failed_count} 项失败").green()
     } else {
-        format!("{failed_count} failed").red()
+        format!("{failed_count} 项失败").red()
     };
     let mut lines = vec![
         vec![
             "• ".dim(),
-            "Claude Code import finished: ".into(),
-            format!("{imported_count} imported").green(),
-            ", ".into(),
+            "Claude Code 导入完成：".into(),
+            format!("{imported_count} 项已导入").green(),
+            "，".into(),
             failed_count,
-            ".".into(),
+            "。".into(),
         ]
         .into(),
     ];
     if !notification.item_type_results.is_empty() {
-        lines.push(vec!["  ".into(), "Results by type:".cyan().bold()].into());
+        lines.push(vec!["  ".into(), "按类型统计的结果：".cyan().bold()].into());
         lines.extend(notification.item_type_results.iter().map(|type_result| {
-            let failed_count = format!("{} failed", type_result.failures.len());
+            let failed_count = format!("{} 项失败", type_result.failures.len());
             let failed_count = if type_result.failures.is_empty() {
                 failed_count.green()
             } else {
@@ -165,9 +166,9 @@ pub(crate) fn external_agent_config_migration_finished_lines(
             vec![
                 "    ".into(),
                 external_agent_config_migration_type_label(type_result.item_type).cyan(),
-                ": ".into(),
-                format!("{} imported", type_result.successes.len()).green(),
-                ", ".into(),
+                "：".into(),
+                format!("{} 项已导入", type_result.successes.len()).green(),
+                "，".into(),
                 failed_count,
             ]
             .into()
@@ -176,7 +177,7 @@ pub(crate) fn external_agent_config_migration_finished_lines(
     lines.push(
         vec![
             "  ".into(),
-            "Run /import again to check for additional items.".dim(),
+            "再次运行 /import 可检查是否还有其他项目。".dim(),
         ]
         .into(),
     );
@@ -186,12 +187,9 @@ pub(crate) fn external_agent_config_migration_finished_lines(
 fn remaining_items_handoff(remaining_item_count: usize) -> Option<String> {
     match remaining_item_count {
         0 => None,
-        1 => Some(
-            "1 additional item remains. After it finishes, run /import again to review it."
-                .to_string(),
-        ),
+        1 => Some("还剩 1 个项目。完成后请再次运行 /import 进行查看。".to_string()),
         _ => Some(format!(
-            "{remaining_item_count} additional items remain. After it finishes, run /import again to review them."
+            "还剩 {remaining_item_count} 个项目。完成后请再次运行 /import 进行查看。"
         )),
     }
 }
@@ -226,7 +224,7 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
                 cwd = %cwd.display(),
                 "failed to detect external agent config migrations"
             );
-            return Err(format!("Could not check for Claude Code setup: {err}"));
+            return Err(format!("无法检查 Claude Code 配置：{err}"));
         }
     };
 
@@ -266,7 +264,7 @@ pub(crate) async fn handle_external_agent_config_migration_prompt(
                             cwd = %cwd.display(),
                             "failed to import external agent config migration items"
                         );
-                        error = Some(format!("Import failed: {err}"));
+                        error = Some(format!("导入失败：{err}"));
                     }
                 }
             }

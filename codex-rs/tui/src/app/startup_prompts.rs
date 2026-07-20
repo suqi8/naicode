@@ -53,7 +53,7 @@ pub(super) fn emit_skill_load_warnings(app_event_tx: &AppEventSender, errors: &[
     let error_count = errors.len();
     app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
         crate::history_cell::new_warning_event(format!(
-            "Skipped loading {error_count} skill(s) due to invalid SKILL.md files."
+            "由于 SKILL.md 文件无效，已跳过加载 {error_count} 个技能。"
         )),
     )));
 
@@ -90,8 +90,8 @@ pub(super) fn emit_project_config_warnings(app_event_tx: &AppEventSender, config
     }
 
     let mut message = concat!(
-        "Project-local config, hooks, and exec policies are disabled in the following folders ",
-        "until the project is trusted, but skills still load.\n",
+        "以下文件夹中的项目级配置、钩子和执行策略在项目被信任前处于禁用状态，",
+        "但技能仍会正常加载。\n",
     )
     .to_string();
     for (index, (folder, reason)) in disabled_folders.iter().enumerate() {
@@ -234,7 +234,18 @@ pub(super) async fn prepare_startup_tooltip_override(
     available_models: &[ModelPreset],
     is_first_run: bool,
 ) -> Option<String> {
-    if is_first_run || !config.show_tooltips {
+    if !config.show_tooltips {
+        return None;
+    }
+
+    // naicode：启动「提示」行优先展示酸奶中转站的最新公告（匿名拉取，
+    // 2s 超时，拿不到就退回原有逻辑，绝不阻塞启动）。
+    if let Ok(Some(notice)) = tokio::task::spawn_blocking(codex_login::fetch_notice_blocking).await
+    {
+        return Some(notice);
+    }
+
+    if is_first_run {
         return None;
     }
 

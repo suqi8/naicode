@@ -15,20 +15,20 @@ pub(crate) const MAX_POPUP_ROWS: usize = 8;
 /// Standard footer hint text used by popups.
 pub(crate) fn standard_popup_hint_line() -> Line<'static> {
     Line::from(vec![
-        "Press ".into(),
+        "按 ".into(),
         key_hint::plain(KeyCode::Enter).into(),
-        " to confirm or ".into(),
+        " 确认，或 ".into(),
         key_hint::plain(KeyCode::Esc).into(),
-        " to go back".into(),
+        " 返回".into(),
     ])
 }
 
 pub(crate) fn standard_popup_hint_line_for_keymap(list_keymap: &ListKeymap) -> Line<'static> {
     accept_cancel_hint_line(
         primary_binding(&list_keymap.accept),
-        "to confirm",
+        "确认",
         primary_binding(&list_keymap.cancel),
-        "to go back",
+        "返回",
     )
 }
 
@@ -40,19 +40,19 @@ pub(crate) fn accept_cancel_hint_line(
 ) -> Line<'static> {
     match (accept, cancel) {
         (Some(accept), Some(cancel)) => Line::from(vec![
-            "Press ".into(),
+            "按 ".into(),
             accept.into(),
-            format!(" {accept_label} or ").into(),
+            format!(" {accept_label}，或 ").into(),
             cancel.into(),
             format!(" {cancel_label}").into(),
         ]),
         (Some(accept), None) => Line::from(vec![
-            "Press ".into(),
+            "按 ".into(),
             accept.into(),
             format!(" {accept_label}").into(),
         ]),
         (None, Some(cancel)) => Line::from(vec![
-            "Press ".into(),
+            "按 ".into(),
             cancel.into(),
             format!(" {cancel_label}").into(),
         ]),

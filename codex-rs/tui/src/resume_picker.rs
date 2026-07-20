@@ -116,15 +116,15 @@ pub enum SessionPickerLaunchContext {
 impl SessionPickerAction {
     fn title(self) -> &'static str {
         match self {
-            SessionPickerAction::Resume => "Resume a previous session",
-            SessionPickerAction::Fork => "Fork a previous session",
+            SessionPickerAction::Resume => "恢复此前的会话",
+            SessionPickerAction::Fork => "从此前的会话分叉",
         }
     }
 
     fn action_label(self) -> &'static str {
         match self {
-            SessionPickerAction::Resume => "resume",
-            SessionPickerAction::Fork => "fork",
+            SessionPickerAction::Resume => "恢复",
+            SessionPickerAction::Fork => "分叉",
         }
     }
 
@@ -1004,7 +1004,7 @@ impl PickerState {
             return;
         };
         let Some(thread_id) = row.thread_id else {
-            self.inline_error = Some("No transcript available for this session".to_string());
+            self.inline_error = Some("该会话没有可用的会话记录".to_string());
             self.request_frame();
             return;
         };
@@ -1122,10 +1122,10 @@ impl PickerState {
                     }
                     self.inline_error = Some(match path {
                         Some(path) => {
-                            format!("Failed to read session metadata from {}", path.display())
+                            format!("无法从 {} 读取会话元数据", path.display())
                         }
                         None => {
-                            String::from("Failed to read session metadata from selected session")
+                            String::from("无法从选中的会话读取会话元数据")
                         }
                     });
                     self.request_frame();
@@ -1329,7 +1329,7 @@ impl PickerState {
                     if self.pending_transcript_open == Some(thread_id) {
                         self.pending_transcript_open = None;
                         self.transcript_loading_frame_shown = false;
-                        self.inline_error = Some("Could not load transcript preview".to_string());
+                        self.inline_error = Some("无法加载会话记录预览".to_string());
                     }
                     self.request_frame();
                 }
@@ -1655,7 +1655,7 @@ impl PickerState {
         self.ensure_selected_visible();
         if let Err(err) = self.persist_density().await {
             warn!(error = %err, "failed to persist session picker view mode");
-            self.inline_error = Some(format!("Failed to save view mode: {err}"));
+            self.inline_error = Some(format!("保存视图模式失败：{err}"));
         }
         self.request_frame();
     }
@@ -1788,7 +1788,7 @@ fn row_from_app_server_thread(thread: Thread) -> Option<Row> {
     Some(Row {
         path: thread.path,
         preview: if preview.is_empty() {
-            String::from("(no message yet)")
+            String::from("（还没有消息）")
         } else {
             preview.to_string()
         },
@@ -1901,9 +1901,9 @@ fn search_line(state: &PickerState, width: u16) -> Line<'_> {
         return Line::from(error.red());
     }
     let search = if state.query.is_empty() {
-        "Type to search".dim()
+        "输入以搜索".dim()
     } else {
-        format!("Search: {}", state.query).into()
+        format!("搜索：{}", state.query).into()
     };
     let mut toolbar = toolbar_line(state, /*compact*/ false);
     if toolbar.width() as u16 > width.saturating_sub(2) {
@@ -2279,7 +2279,7 @@ fn render_transcript_loading_overlay(frame: &mut crate::custom_terminal::Frame, 
         return;
     }
 
-    let message = "Loading transcript…";
+    let message = "正在加载会话记录…";
     let message_width = UnicodeWidthStr::width(message) as u16;
     let overlay_width = if area.width >= message_width.saturating_add(10) {
         message_width + 10
@@ -2476,7 +2476,7 @@ fn render_list(frame: &mut crate::custom_terminal::Frame, area: Rect, state: &Pi
     if state.pagination.loading.is_pending()
         && y < content_area.y.saturating_add(content_area.height)
     {
-        let loading_line: Line = vec!["  ".into(), "Loading older sessions…".italic().dim()].into();
+        let loading_line: Line = vec!["  ".into(), "正在加载更早的会话…".italic().dim()].into();
         let rect = Rect::new(area.x, y, area.width, 1);
         frame.render_widget_ref(loading_line, rect);
     }
@@ -2921,15 +2921,11 @@ fn render_transcript_preview_lines(
     };
     let preview_lines = match state.transcript_previews.get(&thread_id) {
         Some(TranscriptPreviewState::Loading) => {
-            vec![vec!["  │ ".dim(), "Loading recent transcript...".italic().dim()].into()]
+            vec![vec!["  │ ".dim(), "正在加载最近的会话记录...".italic().dim()].into()]
         }
-        Some(TranscriptPreviewState::Failed) => vec![
-            vec![
-                "  │ ".dim(),
-                "Could not load transcript preview".italic().red(),
-            ]
-            .into(),
-        ],
+        Some(TranscriptPreviewState::Failed) => {
+            vec![vec!["  │ ".dim(), "无法加载会话记录预览".italic().red()].into()]
+        }
         Some(TranscriptPreviewState::Loaded(lines)) => {
             render_conversation_preview_lines(lines, width)
         }
@@ -2983,13 +2979,7 @@ fn render_conversation_preview_lines(
     width: u16,
 ) -> Vec<Line<'static>> {
     if lines.is_empty() {
-        return vec![
-            vec![
-                "  └ ".dim(),
-                "No transcript preview available".italic().dim(),
-            ]
-            .into(),
-        ];
+        return vec![vec!["  └ ".dim(), "没有可用的会话记录预览".italic().dim()].into()];
     }
 
     let mut rendered = Vec::new();
@@ -3172,26 +3162,26 @@ fn render_empty_state_line(state: &PickerState) -> Line<'static> {
         if state.search_state.is_active()
             || (state.pagination.loading.is_pending() && state.pagination.next_cursor.is_some())
         {
-            return vec!["Searching…".italic().dim()].into();
+            return vec!["正在搜索…".italic().dim()].into();
         }
         if state.pagination.reached_scan_cap {
             let msg = format!(
-                "Search scanned first {} sessions; more may exist",
+                "搜索已扫描前 {} 个会话；可能还有更多",
                 state.pagination.num_scanned_files
             );
             return vec![Span::from(msg).italic().dim()].into();
         }
-        return vec!["No results for your search".italic().dim()].into();
+        return vec!["没有匹配你搜索的结果".italic().dim()].into();
     }
 
     if state.pagination.loading.is_pending() {
         if state.all_rows.is_empty() && state.pagination.num_scanned_files == 0 {
-            return vec!["Loading sessions…".italic().dim()].into();
+            return vec!["正在加载会话…".italic().dim()].into();
         }
-        return vec!["Loading older sessions…".italic().dim()].into();
+        return vec!["正在加载更早的会话…".italic().dim()].into();
     }
 
-    vec!["No sessions yet".italic().dim()].into()
+    vec!["还没有会话".italic().dim()].into()
 }
 
 #[cfg(test)]

@@ -4,8 +4,8 @@ expression: rendered
 ---
 /mcp
 
-🔌  MCP Tools
+🔌  MCP 工具
 
   • plugin_docs
-    • Auth: Unsupported
-    • Tools: lookup
+    • 鉴权： 不支持
+    • 工具： lookup

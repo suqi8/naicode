@@ -1,0 +1,70 @@
+<style>
+  .explain{max-width:1180px;margin:0 auto 18px;padding:16px 18px;background:#fff8dc;border:1px solid #e5cb66;border-radius:10px;color:#4b3d08}
+  .screen-wrap{max-width:1180px;margin:22px auto 34px}
+  .screen-title{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}.screen-title h3{margin:0}.screen-title span{color:#6b7280}
+  .terminal{background:#0c1210;color:#dbe9e2;border:1px solid #315348;border-radius:12px;box-shadow:0 12px 35px rgba(0,0,0,.16);font:15px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;overflow:hidden}
+  .top{display:flex;justify-content:space-between;padding:11px 16px;background:#14201c;border-bottom:1px solid #315348}.brand{color:#7ce0b1;font-weight:700}.muted{color:#829b91}.ok{color:#6ee7a8}.warn{color:#ffd166}.price{color:#a7f3d0}.focus{color:#fff;background:#234e40}.body{padding:18px 20px;min-height:360px}.row{display:grid;grid-template-columns:26px 210px 1fr;gap:8px;padding:5px 8px;border-radius:5px}.rule{height:1px;background:#284239;margin:12px 0}.input{margin:16px 20px 14px;border:1px solid #4d8b74;border-radius:8px;padding:12px 14px;color:#f4fff9}.foot{display:flex;justify-content:space-between;padding:0 20px 13px;color:#789187;font-size:13px}
+  .dialog{max-width:1040px;margin:20px auto;border:1px solid #4d8b74;background:#101a17;border-radius:10px;padding:0 18px 16px}.dialog-head{display:flex;justify-content:space-between;padding:13px 2px;border-bottom:1px solid #284239;margin-bottom:10px}.cols{display:grid;grid-template-columns:190px 1fr;gap:18px}.groups{border-right:1px solid #284239;padding-right:14px}.group{padding:8px 10px;margin:4px 0;border-radius:6px}.model{padding:8px 10px;margin:3px 0;border-radius:6px}.detail{margin:10px 0 0 44px;padding:10px 12px;border-left:2px solid #4d8b74;color:#b9ccc4;display:grid;grid-template-columns:repeat(4,1fr);gap:5px 14px}.stepbar{display:flex;gap:7px;color:#70877d;font-size:13px}.active-step{color:#7ce0b1;font-weight:700}
+</style>
+
+<h2 style="max-width:1180px;margin:0 auto 8px">重新展示：这是一个连贯的 naicode TUI，而不是三张缩小概念图</h2>
+<div class="explain"><b>刚才那张图确实做坏了：</b>三张界面被横向压缩，文字重叠，既不像真实终端，也看不出操作流程。下面改成接近真实终端比例的三步连续界面。重点先看结构和交互，不是最终像素稿。</div>
+
+<div class="screen-wrap">
+  <div class="screen-title"><h3>① 主界面</h3><span>仍然以对话和编码为中心，不做侧栏控制台</span></div>
+  <div class="terminal">
+    <div class="top"><span class="brand">🥛 naicode · 酸奶中转站</span><span><span class="ok">● 已连接</span>　余额 ¥86.40</span></div>
+    <div class="body">
+      <div style="border:1px solid #315348;border-radius:9px;padding:13px 16px;display:flex;justify-content:space-between">
+        <div><b>gpt-5.6-sol</b>　<span class="muted">思考等级：低</span></div><div class="muted">default 分组　输入 ¥0.20 / 1M</div>
+      </div>
+      <div style="margin-top:28px"><span class="muted">你</span><br>帮我检查这个项目并修复登录问题</div>
+      <div style="margin-top:22px"><span class="brand">酸奶助手</span><br>我会先读取认证链和请求路径，再定位失败原因。</div>
+    </div>
+    <div class="input">› 输入任务或输入 / 打开命令…</div>
+    <div class="foot"><span>/model 模型　/status 状态　/account 账户</span><span>Ctrl+M 切换模型</span></div>
+  </div>
+</div>
+
+<div class="screen-wrap">
+  <div class="screen-title"><h3>② 选择分组与模型</h3><span>完整价格直接展开，不再只显示输入和输出</span></div>
+  <div class="terminal">
+    <div class="top"><span class="brand">模型与分组</span><span class="stepbar"><b class="active-step">1 选择模型</b>　›　2 思考等级　›　3 应用</span></div>
+    <div class="dialog">
+      <div class="dialog-head"><b>选择可用模型</b><span class="muted">输入搜索 · Esc 返回</span></div>
+      <div class="cols">
+        <div class="groups"><div class="muted" style="padding:4px 10px">分组</div><div class="group focus">› default　1.0×</div><div class="group">　vip　　 0.8×</div><div class="group">　绘图组　 1.0×</div></div>
+        <div>
+          <div class="model">　gpt-5.6-terra</div>
+          <div class="model">　gpt-5.6-luna</div>
+          <div class="model focus">› gpt-5.6-sol　　　　　　　　　<span class="price">¥0.20 输入 · ¥1.60 输出</span></div>
+          <div class="detail"><span>缓存读取　¥0.02</span><span>缓存创建　¥0.25</span><span>图片输入　—</span><span>音频输入　—</span><span>音频输出　—</span><span>计价单位　/1M tokens</span><span>分组倍率　1.0×</span><span>货币　　　CNY</span></div>
+          <div class="model">　gpt-image-1.5　　　　　　　　 <span class="price">查看图片价格</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><span>↑↓ 选择　←→ 切换分组　Enter 下一步</span><span>价格与网站模型广场一致</span></div>
+  </div>
+</div>
+
+<div class="screen-wrap">
+  <div class="screen-title"><h3>③ 选择思考等级并原子应用</h3><span>换组失败时不会提前写入模型，也不会显示假成功</span></div>
+  <div class="terminal">
+    <div class="top"><span class="brand">gpt-5.6-sol · 思考等级</span><span class="stepbar">1 选择模型　›　<b class="active-step">2 思考等级</b>　›　3 应用</span></div>
+    <div class="dialog" style="max-width:760px">
+      <div class="dialog-head"><b>这个模型使用多强的思考？</b><span class="muted">默认：低</span></div>
+      <div class="model focus">› 低（默认）　　　速度更快，适合日常编码</div>
+      <div class="model">　中　　　　　　　速度与推理能力平衡</div>
+      <div class="model">　高　　　　　　　适合复杂调试和架构任务</div>
+      <div class="model">　超高　　　　　　更深入，耗时和消耗更高</div>
+      <div class="rule"></div>
+      <div><span class="warn">应用顺序：</span>验证 OAuth → 服务端切换 default 分组 → 保存 gpt-5.6-sol + low → 显示成功</div>
+    </div>
+    <div class="foot"><span>Enter 确认　Esc 返回模型列表</span><span class="ok">不会产生“模型成功但换组失败”</span></div>
+  </div>
+</div>
+
+<div class="options" style="max-width:1180px;margin:0 auto">
+  <div class="option" data-choice="flow-ok" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>这个方向对了</h3><p>保留对话式终端，但整体品牌、状态、模型流程和弹层全部重做。</p></div></div>
+  <div class="option" data-choice="need-dashboard" onclick="toggleSelect(this)"><div class="letter">B</div><div class="content"><h3>我想要工作台/侧栏</h3><p>主界面需要固定导航、余额和设备入口，而不只是对话终端。</p></div></div>
+</div>

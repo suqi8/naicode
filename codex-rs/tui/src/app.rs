@@ -919,7 +919,8 @@ impl App {
                     has_codex_backend_auth,
                     model_catalog: model_catalog.clone(),
                     feedback: feedback.clone(),
-                    is_first_run: true, // 每次 StartFresh 都展示 NAICODE 欢迎首屏
+                    // 欢迎框属于“新建会话”语义，而不是仅首次安装/首次运行。
+                    is_first_run: true,
                     status_account_display: status_account_display.clone(),
                     runtime_model_provider_base_url: runtime_model_provider_base_url.clone(),
                     initial_plan_type,
@@ -955,7 +956,7 @@ impl App {
                     has_codex_backend_auth,
                     model_catalog: model_catalog.clone(),
                     feedback: feedback.clone(),
-                    is_first_run,
+                    is_first_run: false,
                     status_account_display: status_account_display.clone(),
                     runtime_model_provider_base_url: runtime_model_provider_base_url.clone(),
                     initial_plan_type,
@@ -994,7 +995,7 @@ impl App {
                     has_codex_backend_auth,
                     model_catalog: model_catalog.clone(),
                     feedback: feedback.clone(),
-                    is_first_run,
+                    is_first_run: false,
                     status_account_display: status_account_display.clone(),
                     runtime_model_provider_base_url: runtime_model_provider_base_url.clone(),
                     initial_plan_type,

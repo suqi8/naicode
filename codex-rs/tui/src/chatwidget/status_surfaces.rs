@@ -106,12 +106,12 @@ impl ChatWidget {
                 .is_ok()
         {
             let label = if invalid_items.len() == 1 {
-                "item"
+                "项"
             } else {
-                "items"
+                "项"
             };
             let message = format!(
-                "Ignored invalid status line {label}: {}.",
+                "已忽略无效的状态栏{label}：{}。",
                 proper_join(invalid_items)
             );
             self.on_warning(message);
@@ -127,12 +127,12 @@ impl ChatWidget {
                 .is_ok()
         {
             let label = if invalid_items.len() == 1 {
-                "item"
+                "项"
             } else {
-                "items"
+                "项"
             };
             let message = format!(
-                "Ignored invalid terminal title {label}: {}.",
+                "已忽略无效的终端标题{label}：{}。",
                 proper_join(invalid_items)
             );
             self.on_warning(message);
@@ -676,7 +676,7 @@ impl ChatWidget {
                 .and_then(|summary| summary.branch_change_stats.as_ref())
                 .map(|stats| {
                     if stats.additions == 0 && stats.deletions == 0 {
-                        "No changes".to_string()
+                        "无更改".to_string()
                     } else {
                         format!("+{} -{}", stats.additions, stats.deletions)
                     }
@@ -690,15 +690,15 @@ impl ChatWidget {
                 if total <= 0 {
                     None
                 } else {
-                    Some(format!("{} used", format_tokens_compact(total)))
+                    Some(format!("已用 {}", format_tokens_compact(total)))
                 }
             }
             StatusLineItem::ContextRemaining => self
                 .status_line_context_remaining_percent()
-                .map(|remaining| format!("Context {remaining}% left")),
+                .map(|remaining| format!("上下文剩余 {remaining}%")),
             StatusLineItem::ContextUsed => self
                 .status_line_context_used_percent()
-                .map(|used| format!("Context {used}% used")),
+                .map(|used| format!("上下文已用 {used}%")),
             StatusLineItem::FiveHourLimit => {
                 let (window, is_secondary) = self
                     .rate_limit_snapshots_by_limit_id

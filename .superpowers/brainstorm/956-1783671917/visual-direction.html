@@ -1,0 +1,51 @@
+<h2>酸奶中转站 · naicode 全新 TUI 视觉方向</h2>
+<p class="subtitle">不是 Codex 换 API，而是围绕“账号、分组、模型、价格、思考等级”重新建立产品界面。请选择更符合你预期的整体方向。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#101816;color:#e8fff6;padding:18px;font-family:ui-monospace,monospace;min-height:310px">
+      <div style="display:flex;justify-content:space-between;border-bottom:1px solid #285346;padding-bottom:10px">
+        <b style="color:#79e6b5">🥛 NAICODE</b><span style="color:#8ca99e">酸奶中转站 · 已连接</span>
+      </div>
+      <div style="display:grid;grid-template-columns:150px 1fr;gap:14px;margin-top:14px">
+        <div style="border:1px solid #285346;border-radius:8px;padding:12px;color:#9bc8b7;line-height:2">◉ 对话<br>◇ 模型与分组<br>◇ 余额与用量<br>◇ 设备与登录</div>
+        <div>
+          <div style="border:1px solid #3b7965;border-radius:8px;padding:13px;margin-bottom:12px"><b>gpt-5.6-sol</b><br><span style="color:#8ca99e">default · 思考：低 · ¥0.20 输入</span></div>
+          <div style="color:#d5ede4">今天想完成什么？</div>
+          <div style="margin-top:90px;border:1px solid #3b7965;border-radius:8px;padding:12px;color:#8ca99e">› 输入任务…　　　　　　　　　Ctrl+M 模型</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body"><h3>A · 奶绿工作台（推荐）</h3><p>完整产品框架：顶部连接状态、左侧导航、主对话区；信息密度适中，品牌感最强，适合后续扩展余额、设备和公告。</p></div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#131218;color:#f7f1ff;padding:18px;font-family:ui-monospace,monospace;min-height:310px">
+      <div style="border:1px solid #6d5387;border-radius:12px;padding:16px">
+        <div style="color:#dfb8ff;font-size:18px"><b>🥛 naicode</b></div>
+        <div style="color:#a89ab5;margin-top:4px">酸奶中转站 · default / gpt-5.6-sol / low</div>
+      </div>
+      <div style="padding:24px 8px 80px"><span style="color:#a89ab5">你</span><br>帮我检查这个项目<br><br><span style="color:#dfb8ff">酸奶助手</span><br>我会先读取项目结构，再给出方案。</div>
+      <div style="border-top:1px solid #4b3d59;padding-top:14;color:#cbbcd5">› 输入任务…<br><span style="color:#776b80">/model · /status · /account</span></div>
+    </div>
+    <div class="card-body"><h3>B · 沉浸式对话</h3><p>保留单列终端效率，但彻底重做品牌、信息条和弹层。改动更聚焦、学习成本最低，但产品功能入口不如工作台清晰。</p></div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#0d1520;color:#eaf4ff;padding:18px;font-family:ui-monospace,monospace;min-height:310px">
+      <div style="display:flex;justify-content:space-between;color:#75bfff"><b>NAICODE CONTROL</b><span>● ONLINE</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px">
+        <div style="border:1px solid #294965;padding:14px"><small>当前模型</small><br><b>gpt-5.6-sol</b><br><span style="color:#7fa0b9">low reasoning</span></div>
+        <div style="border:1px solid #294965;padding:14px"><small>账户余额</small><br><b>¥ 86.40</b><br><span style="color:#7fa0b9">default 组</span></div>
+      </div>
+      <div style="border:1px solid #294965;margin-top:10px;padding:14px;line-height:1.8"><b style="color:#75bfff">模型价格</b><br>输入　¥0.20　 输出　¥1.60<br>缓存读 ¥0.02　 缓存写 ¥0.25</div>
+      <div style="margin-top:48px;border:1px solid #39709d;padding:12px">› command / prompt</div>
+    </div>
+    <div class="card-body"><h3>C · 数据控制台</h3><p>强调余额、价格、用量和状态，信息最完整、专业感强；但聊天区域视觉权重下降，更像运维控制台。</p></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>三种方向都会统一修复这些流程</h3>
+  <p>授权 catalog → 选择分组 → 查看完整价格 → 选择模型 → 选择思考等级 → 服务端换组成功 → 保存模型与等级；失败时不改本地状态。OAuth token、自动刷新、<code>/v1/models</code> 和请求鉴权也会一起修复。</p>
+</div>

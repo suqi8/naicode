@@ -1339,6 +1339,7 @@ fn stored_auth_mode(auth: &codex_login::AuthDotJson) -> &'static str {
         AuthMode::AgentIdentity => "agent_identity",
         AuthMode::PersonalAccessToken => "personal_access_token",
         AuthMode::BedrockApiKey => "bedrock_api_key",
+        AuthMode::RelayOAuthTokens => "relay_oauth_tokens",
     }
 }
 
@@ -1350,6 +1351,8 @@ fn stored_auth_mode_value(auth: &AuthDotJson) -> AuthMode {
         AuthMode::PersonalAccessToken
     } else if auth.bedrock_api_key.is_some() {
         AuthMode::BedrockApiKey
+    } else if auth.relay_oauth.is_some() {
+        AuthMode::RelayOAuthTokens
     } else if auth.openai_api_key.is_some() {
         AuthMode::ApiKey
     } else {
@@ -1432,6 +1435,17 @@ fn stored_auth_issues(
                 issues.push("Bedrock API key auth is missing a Bedrock API key");
             }
         }
+        AuthMode::RelayOAuthTokens => match auth.relay_oauth.as_ref() {
+            Some(tokens) => {
+                if tokens.access_token.trim().is_empty() {
+                    issues.push("relay OAuth auth is missing an access token");
+                }
+                if tokens.refresh_token.trim().is_empty() {
+                    issues.push("relay OAuth auth is missing a refresh token");
+                }
+            }
+            None => issues.push("relay OAuth auth is missing token data"),
+        },
     }
     issues
 }
@@ -2484,6 +2498,7 @@ fn auth_mode_name(auth: &CodexAuth) -> &'static str {
         AuthMode::AgentIdentity => "agent_identity",
         AuthMode::PersonalAccessToken => "personal_access_token",
         AuthMode::BedrockApiKey => "bedrock_api_key",
+        AuthMode::RelayOAuthTokens => "relay_oauth_tokens",
     }
 }
 
@@ -2616,7 +2631,9 @@ fn provider_auth_reachability_mode_from_auth(
         return ProviderAuthReachabilityMode::Chatgpt;
     }
     match stored_auth.map(stored_auth_mode_value) {
-        Some(AuthMode::ApiKey | AuthMode::BedrockApiKey) => ProviderAuthReachabilityMode::ApiKey,
+        Some(AuthMode::ApiKey | AuthMode::BedrockApiKey | AuthMode::RelayOAuthTokens) => {
+            ProviderAuthReachabilityMode::ApiKey
+        }
         Some(
             AuthMode::Chatgpt
             | AuthMode::ChatgptAuthTokens
@@ -3543,6 +3560,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         };
 
         assert_eq!(
@@ -3562,6 +3580,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         };
 
         assert_eq!(
@@ -3583,6 +3602,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: Some("at-test".to_string()),
             bedrock_api_key: None,
+            relay_oauth: None,
         };
 
         assert_eq!(stored_auth_mode(&auth), "personal_access_token");
@@ -3606,6 +3626,7 @@ mod tests {
             agent_identity: None,
             personal_access_token: None,
             bedrock_api_key: None,
+            relay_oauth: None,
         };
 
         assert_eq!(

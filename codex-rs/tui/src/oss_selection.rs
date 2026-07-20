@@ -67,13 +67,13 @@ static OSS_SELECT_OPTIONS: LazyLock<Vec<SelectOption>> = LazyLock::new(|| {
     vec![
         SelectOption {
             label: Line::from(vec!["L".underlined(), "M Studio".into()]),
-            description: "Local LM Studio server (default port 1234)",
+            description: "本地 LM Studio 服务器（默认端口 1234）",
             key: KeyCode::Char('l'),
             provider_id: LMSTUDIO_OSS_PROVIDER_ID,
         },
         SelectOption {
             label: Line::from(vec!["O".underlined(), "llama".into()]),
-            description: "Local Ollama server (Responses API, default port 11434)",
+            description: "本地 Ollama 服务器（Responses API，默认端口 11434）",
             key: KeyCode::Char('o'),
             provider_id: OLLAMA_OSS_PROVIDER_ID,
         },
@@ -124,12 +124,9 @@ impl OssSelectionWidget<'_> {
         ];
 
         let mut contents: Vec<Line> = vec![
-            Line::from(vec![
-                "? ".fg(Color::Blue),
-                "Select an open-source provider".bold(),
-            ]),
+            Line::from(vec!["? ".fg(Color::Blue), "选择开源提供方".bold()]),
             Line::from(""),
-            Line::from("  Choose which local AI server to use for your session."),
+            Line::from("  选择本次会话要使用的本地 AI 服务器。"),
             Line::from(""),
         ];
 
@@ -143,12 +140,10 @@ impl OssSelectionWidget<'_> {
             ]));
         }
         contents.push(Line::from(""));
-        contents.push(Line::from("  ● Running  ○ Not Running").add_modifier(Modifier::DIM));
+        contents.push(Line::from("  ● 运行中  ○ 未运行").add_modifier(Modifier::DIM));
 
         contents.push(Line::from(""));
-        contents.push(
-            Line::from("  Press Enter to select • Ctrl+C to exit").add_modifier(Modifier::DIM),
-        );
+        contents.push(Line::from("  按 Enter 选择 • Ctrl+C 退出").add_modifier(Modifier::DIM));
 
         let confirmation_prompt = Paragraph::new(contents).wrap(Wrap { trim: false });
 
@@ -279,7 +274,7 @@ impl WidgetRef for &OssSelectionWidget<'_> {
         ])
         .areas(response_chunk.inner(Margin::new(1, 0)));
 
-        Line::from("Select provider?").render(title_area, buf);
+        Line::from("选择提供方？").render(title_area, buf);
 
         self.confirmation_prompt.clone().render(prompt_chunk, buf);
         let areas = Layout::horizontal(

@@ -1260,6 +1260,101 @@ async fn relay_request_refreshes_proactively_before_sending() -> anyhow::Result<
     Ok(())
 }
 
+#[tokio::test]
+#[serial(codex_auth_env)]
+async fn relay_refresh_singleflight_is_shared_across_managers() -> anyhow::Result<()> {
+    let codex_home = tempdir()?;
+    let server = MockServer::start().await;
+    save_auth(
+        codex_home.path(),
+        &relay_auth("expired-access", "old-refresh", "relay-session", 1),
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::Direct,
+    )?;
+    let _refresh_guard = EnvVarGuard::set(
+        RELAY_REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR,
+        &format!("{}/oauth/token", server.uri()),
+    );
+    Mock::given(method("POST"))
+        .and(path("/oauth/token"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(std::time::Duration::from_millis(50))
+                .set_body_json(json!({
+                    "access_token": "fresh-access",
+                    "refresh_token": "fresh-refresh",
+                    "expires_in": 900,
+                    "session_id": "relay-session"
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/resource"))
+        .and(header("authorization", "Bearer fresh-access"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(2)
+        .mount(&server)
+        .await;
+
+    let manager_a = AuthManager::shared(
+        codex_home.path().to_path_buf(),
+        false,
+        AuthCredentialsStoreMode::File,
+        None,
+        None,
+        AuthKeyringBackendKind::Direct,
+        None,
+    )
+    .await;
+    let manager_b = AuthManager::shared(
+        codex_home.path().to_path_buf(),
+        false,
+        AuthCredentialsStoreMode::File,
+        None,
+        None,
+        AuthKeyringBackendKind::Direct,
+        None,
+    )
+    .await;
+    let url = format!("{}/resource", server.uri());
+    let client = reqwest::Client::new();
+    let (a, b) = tokio::join!(
+        manager_a.execute_relay_request(|token| client.get(&url).bearer_auth(token)),
+        manager_b.execute_relay_request(|token| client.get(&url).bearer_auth(token)),
+    );
+    assert_eq!(a?.status(), reqwest::StatusCode::OK);
+    assert_eq!(b?.status(), reqwest::StatusCode::OK);
+    server.verify().await;
+    Ok(())
+}
+
+#[test]
+fn relay_refresh_error_classification_only_revokes_explicit_codes() {
+    for body in [
+        r#"{"error":"invalid_grant"}"#,
+        r#"{"error":{"code":"refresh_token_reused"}}"#,
+        r#"{"error_description":"refresh token already used"}"#,
+    ] {
+        assert_eq!(
+            classify_relay_refresh_failure(body),
+            RelayRefreshFailure::Conflict
+        );
+    }
+    for code in ["device_revoked", "session_revoked", "refresh_token_revoked"] {
+        let body = json!({"error": {"error_code": code}}).to_string();
+        assert_eq!(
+            classify_relay_refresh_failure(&body),
+            RelayRefreshFailure::Revoked
+        );
+    }
+    assert_eq!(
+        classify_relay_refresh_failure(r#"{"error":"temporarily_unavailable"}"#),
+        RelayRefreshFailure::Other
+    );
+}
+
 fn relay_auth(access: &str, refresh: &str, session: &str, expires_at: i64) -> AuthDotJson {
     AuthDotJson {
         auth_mode: Some(AuthMode::RelayOAuthTokens),

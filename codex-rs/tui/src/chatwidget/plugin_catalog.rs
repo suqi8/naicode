@@ -458,7 +458,7 @@ impl ChatWidget {
         marketplace_display_name: &str,
     ) -> SelectionViewParams {
         let mut header = ColumnRenderable::new();
-        header.push(Line::from("Plugins".bold()));
+        header.push(Line::from("插件".bold()));
         header.push(Line::from(
             format!("Removing {marketplace_display_name}...").dim(),
         ));
@@ -468,7 +468,7 @@ impl ChatWidget {
             header: Box::new(header),
             items: vec![SelectionItem {
                 name: "Removing marketplace...".to_string(),
-                description: Some("This updates when marketplace removal completes.".to_string()),
+                description: Some("应用市场移除完成后会更新。".to_string()),
                 is_disabled: true,
                 ..Default::default()
             }],
@@ -481,8 +481,8 @@ impl ChatWidget {
         marketplace_name: Option<&str>,
     ) -> SelectionViewParams {
         let loading_text = marketplace_name
-            .map(|name| format!("Upgrading {name} marketplace..."))
-            .unwrap_or_else(|| "Upgrading marketplaces...".to_string());
+            .map(|name| format!("正在升级 {name} 应用市场..."))
+            .unwrap_or_else(|| "正在升级应用市场...".to_string());
         SelectionViewParams {
             view_id: Some(PLUGINS_SELECTION_VIEW_ID),
             header: Box::new(DelayedLoadingHeader::new(
@@ -493,7 +493,7 @@ impl ChatWidget {
             )),
             items: vec![SelectionItem {
                 name: loading_text,
-                description: Some("This updates when marketplace upgrade completes.".to_string()),
+                description: Some("应用市场升级完成后会更新。".to_string()),
                 is_disabled: true,
                 ..Default::default()
             }],
@@ -510,12 +510,12 @@ impl ChatWidget {
             header: Box::new(DelayedLoadingHeader::new(
                 self.frame_requester.clone(),
                 self.config.animations,
-                format!("Loading details for {plugin_display_name}..."),
+                format!("正在加载 {plugin_display_name} 的详情..."),
                 /*note*/ None,
             )),
             items: vec![SelectionItem {
-                name: "Loading plugin details...".to_string(),
-                description: Some("This updates when plugin details load.".to_string()),
+                name: "正在加载插件详情...".to_string(),
+                description: Some("插件详情加载完成后会更新。".to_string()),
                 is_disabled: true,
                 ..Default::default()
             }],
@@ -537,8 +537,8 @@ impl ChatWidget {
             view_id: Some(PLUGINS_SELECTION_VIEW_ID),
             header: Box::new(header),
             items: vec![SelectionItem {
-                name: "Installing plugin...".to_string(),
-                description: Some("This updates when plugin installation completes.".to_string()),
+                name: "正在安装插件...".to_string(),
+                description: Some("插件安装完成后会更新。".to_string()),
                 is_disabled: true,
                 ..Default::default()
             }],
@@ -560,8 +560,8 @@ impl ChatWidget {
             view_id: Some(PLUGINS_SELECTION_VIEW_ID),
             header: Box::new(header),
             items: vec![SelectionItem {
-                name: "Uninstalling plugin...".to_string(),
-                description: Some("This updates when the plugin removal completes.".to_string()),
+                name: "正在卸载插件...".to_string(),
+                description: Some("插件移除完成后会更新。".to_string()),
                 is_disabled: true,
                 ..Default::default()
             }],
@@ -578,7 +578,7 @@ impl ChatWidget {
             view_id: Some(PLUGINS_SELECTION_VIEW_ID),
             header: Box::new(header),
             items: vec![SelectionItem {
-                name: "Plugin marketplace unavailable".to_string(),
+                name: "插件应用市场不可用".to_string(),
                 description: Some(err.to_string()),
                 is_disabled: true,
                 ..Default::default()
@@ -594,17 +594,15 @@ impl ChatWidget {
 
         let mut items = vec![
             SelectionItem {
-                name: "Marketplace add failed".to_string(),
-                description: Some(
-                    "Failed to add marketplace from the provided source.".to_string(),
-                ),
+                name: "添加应用市场失败".to_string(),
+                description: Some("无法从所提供的来源添加应用市场。".to_string()),
                 is_disabled: true,
                 ..Default::default()
             },
             SelectionItem {
-                name: "Try again".to_string(),
-                description: Some("Enter a marketplace source.".to_string()),
-                selected_description: Some("Enter a marketplace source.".to_string()),
+                name: "重试".to_string(),
+                description: Some("输入应用市场来源。".to_string()),
+                selected_description: Some("输入应用市场来源。".to_string()),
                 actions: vec![Box::new(|tx| {
                     tx.send(AppEvent::OpenMarketplaceAddPrompt);
                 })],
@@ -615,9 +613,9 @@ impl ChatWidget {
         if let PluginsCacheState::Ready(plugins_response) = self.plugins_cache_for_current_cwd() {
             let cwd = self.config.cwd.to_path_buf();
             items.push(SelectionItem {
-                name: "Back to plugins".to_string(),
-                description: Some("Return to the plugin list.".to_string()),
-                selected_description: Some("Return to the plugin list.".to_string()),
+                name: "返回插件列表".to_string(),
+                description: Some("返回插件列表。".to_string()),
+                selected_description: Some("返回插件列表。".to_string()),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenPluginsList {
                         cwd: cwd.clone(),
@@ -650,15 +648,15 @@ impl ChatWidget {
         let marketplace_display_name = marketplace_display_name.to_string();
         let mut items = vec![
             SelectionItem {
-                name: "Marketplace removal failed".to_string(),
-                description: Some("Failed to remove the selected marketplace.".to_string()),
+                name: "移除应用市场失败".to_string(),
+                description: Some("无法移除所选的应用市场。".to_string()),
                 is_disabled: true,
                 ..Default::default()
             },
             SelectionItem {
-                name: "Try again".to_string(),
-                description: Some("Review the confirmation prompt again.".to_string()),
-                selected_description: Some("Review the confirmation prompt again.".to_string()),
+                name: "重试".to_string(),
+                description: Some("再次查看确认提示。".to_string()),
+                selected_description: Some("再次查看确认提示。".to_string()),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenMarketplaceRemoveConfirm {
                         marketplace_name: marketplace_name.clone(),
@@ -672,9 +670,9 @@ impl ChatWidget {
         if let PluginsCacheState::Ready(plugins_response) = self.plugins_cache_for_current_cwd() {
             let cwd = self.config.cwd.to_path_buf();
             items.push(SelectionItem {
-                name: "Back to plugins".to_string(),
-                description: Some("Return to the plugin list.".to_string()),
-                selected_description: Some("Return to the plugin list.".to_string()),
+                name: "返回插件列表".to_string(),
+                description: Some("返回插件列表。".to_string()),
+                selected_description: Some("返回插件列表。".to_string()),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenPluginsList {
                         cwd: cwd.clone(),
@@ -712,9 +710,9 @@ impl ChatWidget {
         if let Some(plugins_response) = plugins_response.cloned() {
             let cwd = self.config.cwd.to_path_buf();
             items.push(SelectionItem {
-                name: "Back to plugins".to_string(),
-                description: Some("Return to the plugin list.".to_string()),
-                selected_description: Some("Return to the plugin list.".to_string()),
+                name: "返回插件列表".to_string(),
+                description: Some("返回插件列表。".to_string()),
+                selected_description: Some("返回插件列表。".to_string()),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenPluginsList {
                         cwd: cwd.clone(),
@@ -959,7 +957,7 @@ impl ChatWidget {
             tabs,
             initial_tab_id,
             is_searchable: true,
-            search_placeholder: Some("Type to search plugins".to_string()),
+            search_placeholder: Some("输入以搜索插件".to_string()),
             col_width_mode: ColumnWidthMode::AutoAllRows,
             row_display: SelectionRowDisplay::SingleLine,
             name_column_width,
@@ -1014,13 +1012,13 @@ impl ChatWidget {
         if !plugin.summary.installed {
             header.push(PluginDisclosureLine {
                 line: Line::from(vec![
-                    "Data shared with this app is subject to the app's ".into(),
-                    "terms of service".bold(),
-                    " and ".into(),
-                    "privacy policy".bold(),
-                    ". ".into(),
-                    "Learn more".cyan().underlined(),
-                    ".".into(),
+                    "与此应用共享的数据受该应用的".into(),
+                    "服务条款".bold(),
+                    "和".into(),
+                    "隐私政策".bold(),
+                    "约束。".into(),
+                    "了解更多".cyan().underlined(),
+                    "。".into(),
                 ]),
             });
         }
@@ -1131,25 +1129,25 @@ impl ChatWidget {
         items.extend(plugin_metadata_items(plugin));
 
         items.push(SelectionItem {
-            name: "Skills".to_string(),
+            name: "技能".to_string(),
             description: Some(plugin_skill_summary(plugin)),
             is_disabled: true,
             ..Default::default()
         });
         items.push(SelectionItem {
-            name: "Hooks".to_string(),
+            name: "钩子".to_string(),
             description: Some(plugin_hook_summary(plugin)),
             is_disabled: true,
             ..Default::default()
         });
         items.push(SelectionItem {
-            name: "Apps".to_string(),
+            name: "应用".to_string(),
             description: Some(plugin_app_summary(plugin)),
             is_disabled: true,
             ..Default::default()
         });
         items.push(SelectionItem {
-            name: "MCP Servers".to_string(),
+            name: "MCP 服务器".to_string(),
             description: Some(plugin_mcp_summary(plugin)),
             is_disabled: true,
             ..Default::default()
@@ -1198,26 +1196,26 @@ impl ChatWidget {
                 && !disabled_by_admin;
             let selected_status_label = format!("{status_label:<status_label_width$}");
             let selected_description = if can_toggle_plugin {
-                let toggle_action = if plugin.enabled { "disable" } else { "enable" };
+                let toggle_action = if plugin.enabled { "禁用" } else { "启用" };
                 if can_view_details {
                     format!(
-                        "{selected_status_label}   Space to {toggle_action}; Enter view details."
+                        "{selected_status_label}   按 Space {toggle_action}；按 Enter 查看详情。"
                     )
                 } else {
-                    format!("{selected_status_label}   Space to {toggle_action}.")
+                    format!("{selected_status_label}   按 Space {toggle_action}。")
                 }
             } else if disabled_by_admin && can_view_details {
-                format!("{selected_status_label}   Press Enter to view plugin details.")
+                format!("{selected_status_label}   按 Enter 查看插件详情。")
             } else if disabled_by_admin {
-                format!("{selected_status_label}   Plugin details are unavailable.")
+                format!("{selected_status_label}   插件详情不可用。")
             } else if plugin.installed && can_view_details {
-                format!("{selected_status_label}   Press Enter to view plugin details.")
+                format!("{selected_status_label}   按 Enter 查看插件详情。")
             } else if plugin.installed {
-                format!("{selected_status_label}   Plugin details are unavailable.")
+                format!("{selected_status_label}   插件详情不可用。")
             } else if can_view_details {
-                format!("{selected_status_label}   Press Enter to install or view plugin details.")
+                format!("{selected_status_label}   按 Enter 安装或查看插件详情。")
             } else {
-                format!("{selected_status_label}   Remote plugin details are not available yet.")
+                format!("{selected_status_label}   远程插件详情尚不可用。")
             };
             let search_value = format!(
                 "{display_name} {} {} {} {} {}",
@@ -1302,22 +1300,22 @@ fn plugins_popup_hint_line(
 ) -> Line<'static> {
     match (can_remove_marketplace, can_upgrade_marketplace) {
         (true, true) => Line::from(
-            "ctrl + u upgrade · ctrl + r remove · space toggle · ←/→ tabs · enter details · esc close",
+            "ctrl + u 升级 · ctrl + r 移除 · space 开关 · ←/→ 切换标签 · enter 详情 · esc 关闭",
         ),
         (true, false) => {
-            Line::from("ctrl + r remove · space toggle · ←/→ tabs · enter details · esc close")
+            Line::from("ctrl + r 移除 · space 开关 · ←/→ 切换标签 · enter 详情 · esc 关闭")
         }
         (false, true) => {
-            Line::from("ctrl + u upgrade · space toggle · ←/→ tabs · enter details · esc close")
+            Line::from("ctrl + u 升级 · space 开关 · ←/→ 切换标签 · enter 详情 · esc 关闭")
         }
-        (false, false) => Line::from(
-            "space enable/disable · ←/→ select marketplace · enter view details · esc close",
-        ),
+        (false, false) => {
+            Line::from("space 启用/禁用 · ←/→ 选择应用市场 · enter 查看详情 · esc 关闭")
+        }
     }
 }
 
 pub(super) fn plugin_detail_hint_line() -> Line<'static> {
-    Line::from("Press esc to close.")
+    Line::from("按 esc 关闭。")
 }
 
 pub(super) fn plugins_header(subtitle: String, count_line: String) -> Box<dyn Renderable> {
@@ -1437,20 +1435,20 @@ fn plugin_detail_status_label(plugin: &PluginSummary) -> &'static str {
 fn plugin_metadata_items(plugin: &PluginDetail) -> Vec<SelectionItem> {
     let mut items = Vec::new();
     items.push(SelectionItem {
-        name: "Source".to_string(),
+        name: "来源".to_string(),
         description: Some(plugin_source_summary(plugin)),
         is_disabled: true,
         ..Default::default()
     });
     items.push(SelectionItem {
-        name: "Auth".to_string(),
+        name: "认证".to_string(),
         description: Some(plugin_auth_policy_summary(plugin.summary.auth_policy)),
         is_disabled: true,
         ..Default::default()
     });
     if let Some(version) = plugin_version_summary(&plugin.summary) {
         items.push(SelectionItem {
-            name: "Version".to_string(),
+            name: "版本".to_string(),
             description: Some(version),
             is_disabled: true,
             ..Default::default()
@@ -1458,7 +1456,7 @@ fn plugin_metadata_items(plugin: &PluginDetail) -> Vec<SelectionItem> {
     }
     if let Some(share_context) = &plugin.summary.share_context {
         items.push(SelectionItem {
-            name: "Sharing".to_string(),
+            name: "共享".to_string(),
             description: Some(plugin_share_context_summary(share_context)),
             is_disabled: true,
             ..Default::default()
@@ -1469,7 +1467,7 @@ fn plugin_metadata_items(plugin: &PluginDetail) -> Vec<SelectionItem> {
 
 fn plugin_source_summary(plugin: &PluginDetail) -> String {
     match &plugin.summary.source {
-        PluginSource::Local { .. } => "Local".to_string(),
+        PluginSource::Local { .. } => "本地".to_string(),
         PluginSource::Git { url, ref_name, .. } => match ref_name {
             Some(ref_name) => format!("Git · {url}@{ref_name}"),
             None => format!("Git · {url}"),
@@ -1485,29 +1483,29 @@ fn plugin_source_summary(plugin: &PluginDetail) -> String {
                 MarketplaceProduct::from_marketplace_name(&plugin.marketplace_name)
                     .label()
                     .unwrap_or(plugin.marketplace_name.as_str());
-            format!("Remote · {marketplace_label}")
+            format!("远程 · {marketplace_label}")
         }
     }
 }
 
 fn plugin_auth_policy_summary(auth_policy: PluginAuthPolicy) -> String {
     match auth_policy {
-        PluginAuthPolicy::OnInstall => "Auth on install".to_string(),
-        PluginAuthPolicy::OnUse => "Auth on use".to_string(),
+        PluginAuthPolicy::OnInstall => "安装时认证".to_string(),
+        PluginAuthPolicy::OnUse => "使用时认证".to_string(),
     }
 }
 
 fn plugin_version_summary(plugin: &PluginSummary) -> Option<String> {
     let mut parts = Vec::new();
     if let Some(local_version) = plugin.local_version.as_deref() {
-        parts.push(format!("local {local_version}"));
+        parts.push(format!("本地 {local_version}"));
     }
     if let Some(remote_version) = plugin
         .share_context
         .as_ref()
         .and_then(|context| context.remote_version.as_deref())
     {
-        parts.push(format!("remote {remote_version}"));
+        parts.push(format!("远程 {remote_version}"));
     }
     (!parts.is_empty()).then(|| parts.join(" · "))
 }
@@ -1531,7 +1529,7 @@ fn plugin_share_context_summary(context: &PluginShareContext) -> String {
         parts.push(share_url.to_string());
     }
     if parts.is_empty() {
-        format!("Remote ID {}", context.remote_plugin_id)
+        format!("远程 ID {}", context.remote_plugin_id)
     } else {
         parts.join(" · ")
     }
@@ -1539,9 +1537,9 @@ fn plugin_share_context_summary(context: &PluginShareContext) -> String {
 
 fn plugin_share_discoverability_label(discoverability: PluginShareDiscoverability) -> &'static str {
     match discoverability {
-        PluginShareDiscoverability::Listed => "Listed",
-        PluginShareDiscoverability::Unlisted => "Workspace link",
-        PluginShareDiscoverability::Private => "Private",
+        PluginShareDiscoverability::Listed => "已列出",
+        PluginShareDiscoverability::Unlisted => "工作区链接",
+        PluginShareDiscoverability::Private => "私有",
     }
 }
 
@@ -1550,18 +1548,18 @@ fn plugin_share_creator_summary(context: &PluginShareContext) -> Option<String> 
         context.creator_name.as_deref(),
         context.creator_account_user_id.as_deref(),
     ) {
-        (Some(name), Some(account_id)) => Some(format!("creator {name} ({account_id})")),
-        (Some(name), None) => Some(format!("creator {name}")),
-        (None, Some(account_id)) => Some(format!("creator account {account_id}")),
+        (Some(name), Some(account_id)) => Some(format!("创建者 {name}（{account_id}）")),
+        (Some(name), None) => Some(format!("创建者 {name}")),
+        (None, Some(account_id)) => Some(format!("创建者账户 {account_id}")),
         (None, None) => None,
     }
 }
 
 fn plugin_share_principals_summary(principals: &[PluginSharePrincipal]) -> String {
     match principals.len() {
-        0 => "No explicit principals".to_string(),
-        1 => format!("1 principal: {}", principals[0].name),
-        count => format!("{count} principals"),
+        0 => "无明确的主体".to_string(),
+        1 => format!("1 个主体：{}", principals[0].name),
+        count => format!("{count} 个主体"),
     }
 }
 
@@ -2009,7 +2007,7 @@ fn plugin_detail_description(plugin: &PluginDetail) -> Option<String> {
 
 fn plugin_skill_summary(plugin: &PluginDetail) -> String {
     if plugin.skills.is_empty() {
-        "No plugin skills.".to_string()
+        "无插件技能。".to_string()
     } else {
         plugin
             .skills
@@ -2022,7 +2020,7 @@ fn plugin_skill_summary(plugin: &PluginDetail) -> String {
 
 fn plugin_app_summary(plugin: &PluginDetail) -> String {
     if plugin.apps.is_empty() {
-        "No plugin apps.".to_string()
+        "无插件应用。".to_string()
     } else {
         plugin
             .apps
@@ -2035,7 +2033,7 @@ fn plugin_app_summary(plugin: &PluginDetail) -> String {
 
 fn plugin_hook_summary(plugin: &PluginDetail) -> String {
     if plugin.hooks.is_empty() {
-        "No plugin hooks.".to_string()
+        "无插件钩子。".to_string()
     } else {
         let mut event_counts = Vec::<(codex_app_server_protocol::HookEventName, usize)>::new();
         for hook in &plugin.hooks {
@@ -2058,7 +2056,7 @@ fn plugin_hook_summary(plugin: &PluginDetail) -> String {
 
 fn plugin_mcp_summary(plugin: &PluginDetail) -> String {
     if plugin.mcp_servers.is_empty() {
-        "No plugin MCP servers.".to_string()
+        "无插件 MCP 服务器。".to_string()
     } else {
         plugin.mcp_servers.join(", ")
     }

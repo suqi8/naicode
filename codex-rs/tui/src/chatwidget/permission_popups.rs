@@ -54,7 +54,7 @@ impl ChatWidget {
                 continue;
             }
             let base_name = if preset.id == "auto" && windows_degraded_sandbox_enabled {
-                format!("{ASK_FOR_APPROVAL_LABEL} (non-admin sandbox)")
+                format!("{ASK_FOR_APPROVAL_LABEL}（非管理员沙箱）")
             } else if preset.id == "auto" {
                 ASK_FOR_APPROVAL_LABEL.to_string()
             } else {
@@ -142,15 +142,15 @@ impl ChatWidget {
 
         let footer_note = show_elevate_sandbox_hint.then(|| {
             vec![
-                "The non-admin sandbox protects your files and prevents network access under most circumstances. However, it carries greater risk if prompt injected. To upgrade to the default sandbox, run ".dim(),
+                "非管理员沙箱在大多数情况下能保护你的文件并阻止网络访问。但若遭遇提示词注入，风险会更大。要升级到默认沙箱，请运行 ".dim(),
                 "/setup-default-sandbox".cyan(),
-                ".".dim(),
+                "。".dim(),
             ]
             .into()
         });
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
-            title: Some("Update Model Permissions".to_string()),
+            title: Some("更新模型权限".to_string()),
             footer_note,
             footer_hint: Some(standard_popup_hint_line()),
             items,
@@ -162,19 +162,19 @@ impl ChatWidget {
     pub(crate) fn open_auto_review_denials_popup(&mut self) {
         if self.review.recent_auto_review_denials.is_empty() {
             self.add_info_message(
-                "No recent auto-review denials in this thread.".to_string(),
-                Some("Denials are recorded after auto-review rejects an action.".to_string()),
+                "此线程中没有最近的自动审阅拒绝记录。".to_string(),
+                Some("自动审阅拒绝某个操作后会记录下来。".to_string()),
             );
             return;
         }
         let Some(thread_id) = self.thread_id() else {
-            self.add_error_message("That thread is no longer available.".to_string());
+            self.add_error_message("该线程已不可用。".to_string());
             return;
         };
 
         let mut items = vec![SelectionItem {
-            name: "Command".to_string(),
-            description: Some("Rationale".to_string()),
+            name: "命令".to_string(),
+            description: Some("理由".to_string()),
             is_disabled: true,
             search_value: Some(String::new()),
             ..Default::default()
@@ -186,10 +186,7 @@ impl ChatWidget {
                 .map(|event| {
                     let id = event.id.clone();
                     let summary = auto_review_denials::action_summary(&event.action);
-                    let rationale = event
-                        .rationale
-                        .as_deref()
-                        .unwrap_or("Auto-review did not include a rationale.");
+                    let rationale = event.rationale.as_deref().unwrap_or("自动审阅未提供理由。");
                     SelectionItem {
                         name: summary.clone(),
                         description: Some(rationale.to_string()),
@@ -208,8 +205,8 @@ impl ChatWidget {
         );
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
-            title: Some("Auto-review Denials".to_string()),
-            subtitle: Some("Select a denied action to approve.".to_string()),
+            title: Some("自动审阅拒绝记录".to_string()),
+            subtitle: Some("选择一个被拒绝的操作以批准。".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             is_searchable: true,
@@ -221,7 +218,7 @@ impl ChatWidget {
 
     pub(crate) fn approve_recent_auto_review_denial(&mut self, thread_id: ThreadId, id: String) {
         let Some(event) = self.review.recent_auto_review_denials.take(&id) else {
-            self.add_error_message("That auto-review denial is no longer available.".to_string());
+            self.add_error_message("该自动审阅拒绝记录已不可用。".to_string());
             return;
         };
 
@@ -230,11 +227,8 @@ impl ChatWidget {
             op: AppCommand::approve_guardian_denied_action(event),
         });
         self.add_info_message(
-            "Approval recorded for one retry of the selected auto-review denial.".to_string(),
-            Some(
-                "The model will see the approval context; the retry still goes through auto-review."
-                    .to_string(),
-            ),
+            "已为所选的自动审阅拒绝记录批准一次重试。".to_string(),
+            Some("模型会看到批准上下文；该重试仍会经过自动审阅。".to_string()),
         );
     }
 
@@ -266,10 +260,7 @@ impl ChatWidget {
             ));
             tx.send(AppEvent::UpdateApprovalsReviewer(approvals_reviewer));
             tx.send(AppEvent::InsertHistoryCell(Box::new(
-                history_cell::new_info_event(
-                    format!("Permissions updated to {label}"),
-                    /*hint*/ None,
-                ),
+                history_cell::new_info_event(format!("权限已更新为 {label}"), /*hint*/ None),
             )));
         })]
     }
@@ -413,11 +404,11 @@ impl ChatWidget {
         let selected_name = preset.label.to_string();
         let approval = AskForApproval::from(preset.approval);
         let mut header_children: Vec<Box<dyn Renderable>> = Vec::new();
-        let title_line = Line::from("Enable full access?").bold();
+        let title_line = Line::from("启用完全访问权限？").bold();
         let info_line = Line::from(vec![
-            "When Codex runs with full access, it can edit any file on your computer and run commands with network, without your approval. "
+            "当 naicode 以完全访问权限运行时，它无需你的批准即可编辑你电脑上的任何文件并运行联网命令。"
                 .into(),
-            "Exercise caution when enabling full access. This significantly increases the risk of data loss, leaks, or unexpected behavior."
+            "启用完全访问权限时请谨慎。这会大幅增加数据丢失、泄露或意外行为的风险。"
                 .fg(Color::Red),
         ]);
         header_children.push(Box::new(title_line));
@@ -469,22 +460,22 @@ impl ChatWidget {
 
         let items = vec![
             SelectionItem {
-                name: "Yes, continue anyway".to_string(),
-                description: Some("Apply full access for this session".to_string()),
+                name: "是，仍然继续".to_string(),
+                description: Some("为本次会话应用完全访问权限".to_string()),
                 actions: accept_actions,
                 dismiss_on_select: true,
                 ..Default::default()
             },
             SelectionItem {
-                name: "Yes, and don't ask again".to_string(),
-                description: Some("Enable full access and remember this choice".to_string()),
+                name: "是，且不再询问".to_string(),
+                description: Some("启用完全访问权限并记住此选择".to_string()),
                 actions: accept_and_remember_actions,
                 dismiss_on_select: true,
                 ..Default::default()
             },
             SelectionItem {
-                name: "Cancel".to_string(),
-                description: Some("Go back without enabling full access".to_string()),
+                name: "取消".to_string(),
+                description: Some("返回且不启用完全访问权限".to_string()),
                 actions: deny_actions,
                 dismiss_on_select: true,
                 ..Default::default()

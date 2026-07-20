@@ -1114,6 +1114,14 @@ impl Drop for ModelClientSession {
 }
 
 impl ModelClientSession {
+    pub(crate) fn auth_manager(&self) -> Option<Arc<AuthManager>> {
+        self.client.auth_manager()
+    }
+
+    pub(crate) fn reset_transport_after_auth_refresh(&mut self) {
+        self.reset_websocket_session();
+    }
+
     pub(crate) fn turn_state(&self) -> Arc<OnceLock<String>> {
         Arc::clone(&self.turn_state)
     }
@@ -2141,6 +2149,7 @@ impl AuthRequestTelemetryContext {
         Self {
             auth_mode: auth_mode.map(|mode| match mode {
                 AuthMode::ApiKey | AuthMode::BedrockApiKey => "ApiKey",
+                AuthMode::RelayOAuthTokens => "RelayOAuth",
                 AuthMode::Chatgpt
                 | AuthMode::ChatgptAuthTokens
                 | AuthMode::Headers

@@ -47,7 +47,7 @@ impl RateLimitWarningState {
                     limit_label_for_window(secondary_window_minutes, /*is_secondary*/ true);
                 let remaining_percent = 100.0 - threshold;
                 warnings.push(format!(
-                    "Heads up, you have less than {remaining_percent:.0}% of your {limit_label} limit left. Run /status for a breakdown."
+                    "提醒：你的 {limit_label} 限额剩余不足 {remaining_percent:.0}%。运行 /status 查看明细。"
                 ));
             }
         }
@@ -65,7 +65,7 @@ impl RateLimitWarningState {
                     limit_label_for_window(primary_window_minutes, /*is_secondary*/ false);
                 let remaining_percent = 100.0 - threshold;
                 warnings.push(format!(
-                    "Heads up, you have less than {remaining_percent:.0}% of your {limit_label} limit left. Run /status for a breakdown."
+                    "提醒：你的 {limit_label} 限额剩余不足 {remaining_percent:.0}%。运行 /status 查看明细。"
                 ));
             }
         }
@@ -368,14 +368,14 @@ impl ChatWidget {
             tx.send(AppEvent::PersistRateLimitSwitchPromptHidden);
         })];
         let description = if preset.description.is_empty() {
-            Some("Uses fewer credits for upcoming turns.".to_string())
+            Some("在后续回合中使用更少的额度。".to_string())
         } else {
             Some(preset.description)
         };
 
         let items = vec![
             SelectionItem {
-                name: format!("Switch to {switch_model}"),
+                name: format!("切换到 {switch_model}"),
                 description,
                 selected_description: None,
                 is_current: false,
@@ -384,7 +384,7 @@ impl ChatWidget {
                 ..Default::default()
             },
             SelectionItem {
-                name: "Keep current model".to_string(),
+                name: "保持当前模型".to_string(),
                 description: None,
                 selected_description: None,
                 is_current: false,
@@ -393,10 +393,8 @@ impl ChatWidget {
                 ..Default::default()
             },
             SelectionItem {
-                name: "Keep current model (never show again)".to_string(),
-                description: Some(
-                    "Hide future rate limit reminders about switching models.".to_string(),
-                ),
+                name: "保持当前模型（不再显示）".to_string(),
+                description: Some("隐藏今后关于切换模型的速率限制提醒。".to_string()),
                 selected_description: None,
                 is_current: false,
                 actions: never_actions,
@@ -425,12 +423,12 @@ impl ChatWidget {
 
         let (title, prompt) = match credit_type {
             AddCreditsNudgeCreditType::Credits => (
-                "You've reached your workspace credit limit",
-                "Your workspace is out of credits. Ask your workspace owner to add more. Notify owner?",
+                "你已达到工作区额度上限",
+                "你的工作区额度已用尽。请让工作区所有者添加更多额度。要通知所有者吗？",
             ),
             AddCreditsNudgeCreditType::UsageLimit => (
-                "Usage limit reached",
-                "Request a limit increase from your owner to continue using codex. Request increase?",
+                "已达到用量上限",
+                "请向所有者申请提高上限以继续使用 naicode。要申请提额吗？",
             ),
         };
         let send_actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
@@ -438,14 +436,14 @@ impl ChatWidget {
         })];
         let items = vec![
             SelectionItem {
-                name: "Yes".to_string(),
+                name: "是".to_string(),
                 display_shortcut: Some(key_hint::plain(KeyCode::Char('y'))),
                 actions: send_actions,
                 dismiss_on_select: true,
                 ..Default::default()
             },
             SelectionItem {
-                name: "No".to_string(),
+                name: "否".to_string(),
                 display_shortcut: Some(key_hint::plain(KeyCode::Char('n'))),
                 is_default: true,
                 dismiss_on_select: true,

@@ -48,21 +48,21 @@ use codex_app_server_protocol::ToolRequestUserInputResponse;
 use codex_protocol::user_input::TextElement;
 use unicode_width::UnicodeWidthStr;
 
-const NOTES_PLACEHOLDER: &str = "Add notes";
-const ANSWER_PLACEHOLDER: &str = "Type your answer (optional)";
+const NOTES_PLACEHOLDER: &str = "添加备注";
+const ANSWER_PLACEHOLDER: &str = "输入你的回答（可选）";
 // Keep in sync with ChatComposer's minimum composer height.
 const MIN_COMPOSER_HEIGHT: u16 = 3;
-const SELECT_OPTION_PLACEHOLDER: &str = "Select an option to add notes";
+const SELECT_OPTION_PLACEHOLDER: &str = "选择一个选项以添加备注";
 pub(super) const TIP_SEPARATOR: &str = " | ";
 pub(super) const DESIRED_SPACERS_BETWEEN_SECTIONS: u16 = 2;
-const OTHER_OPTION_LABEL: &str = "None of the above";
-const OTHER_OPTION_DESCRIPTION: &str = "Optionally, add details in notes (tab).";
-const UNANSWERED_CONFIRM_TITLE: &str = "Submit with unanswered questions?";
-const UNANSWERED_CONFIRM_GO_BACK: &str = "Go back";
-const UNANSWERED_CONFIRM_GO_BACK_DESC: &str = "Return to the first unanswered question.";
-const UNANSWERED_CONFIRM_SUBMIT: &str = "Proceed";
-const UNANSWERED_CONFIRM_SUBMIT_DESC_SINGULAR: &str = "question";
-const UNANSWERED_CONFIRM_SUBMIT_DESC_PLURAL: &str = "questions";
+const OTHER_OPTION_LABEL: &str = "以上都不是";
+const OTHER_OPTION_DESCRIPTION: &str = "可选，在备注中补充详情（tab）。";
+const UNANSWERED_CONFIRM_TITLE: &str = "有未回答的问题，仍要提交吗？";
+const UNANSWERED_CONFIRM_GO_BACK: &str = "返回";
+const UNANSWERED_CONFIRM_GO_BACK_DESC: &str = "返回到第一个未回答的问题。";
+const UNANSWERED_CONFIRM_SUBMIT: &str = "继续";
+const UNANSWERED_CONFIRM_SUBMIT_DESC_SINGULAR: &str = "个问题";
+const UNANSWERED_CONFIRM_SUBMIT_DESC_PLURAL: &str = "个问题";
 const AUTO_RESOLUTION_HIDDEN_GRACE: Duration = Duration::from_secs(/*secs*/ 60);
 const AUTO_RESOLUTION_VISIBLE_COUNTDOWN: Duration = Duration::from_secs(/*secs*/ 60);
 
@@ -325,7 +325,7 @@ impl RequestUserInputOverlay {
     fn auto_resolution_countdown_text_at(&self, now: Instant) -> Option<String> {
         match self.auto_resolution_timing_at(now) {
             AutoResolutionTiming::VisibleCountdown { remaining } => Some(format!(
-                "auto-resolves in {}",
+                "{} 后自动处理",
                 format_auto_resolution_remaining(remaining)
             )),
             AutoResolutionTiming::Disabled
@@ -338,15 +338,15 @@ impl RequestUserInputOverlay {
         if self.question_count() > 0 {
             let idx = self.current_index() + 1;
             let total = self.question_count();
-            let base = format!("Question {idx}/{total}");
+            let base = format!("问题 {idx}/{total}");
             let unanswered = self.unanswered_count();
             if unanswered > 0 {
-                format!("{base} ({unanswered} unanswered)")
+                format!("{base}（{unanswered} 个未回答）")
             } else {
                 base
             }
         } else {
-            "No questions".to_string()
+            "没有问题".to_string()
         }
     }
 
@@ -584,10 +584,10 @@ impl RequestUserInputOverlay {
         let notes_visible = self.notes_ui_visible();
         if self.has_options() {
             if self.selected_option_index().is_some() && !notes_visible {
-                tips.push(FooterTip::highlighted("tab to add notes"));
+                tips.push(FooterTip::highlighted("tab 添加备注"));
             }
             if self.selected_option_index().is_some() && notes_visible {
-                tips.push(FooterTip::new("tab or esc to clear notes"));
+                tips.push(FooterTip::new("tab 或 esc 清除备注"));
             }
         }
 
@@ -602,11 +602,11 @@ impl RequestUserInputOverlay {
         };
         if let Some(submit_key) = submit_key {
             let submit_tip = if question_count == 1 {
-                FooterTip::highlighted(format!("{submit_key} to submit answer"))
+                FooterTip::highlighted(format!("{submit_key} 提交回答"))
             } else if is_last_question {
-                FooterTip::highlighted(format!("{submit_key} to submit all"))
+                FooterTip::highlighted(format!("{submit_key} 全部提交"))
             } else {
-                FooterTip::new(format!("{submit_key} to submit answer"))
+                FooterTip::new(format!("{submit_key} 提交回答"))
             };
             tips.push(submit_tip);
         }
@@ -982,7 +982,7 @@ impl RequestUserInputOverlay {
         } else {
             UNANSWERED_CONFIRM_SUBMIT_DESC_PLURAL
         };
-        format!("Submit with {count} unanswered {suffix}.")
+        format!("提交时仍有 {count} {suffix}未回答。")
     }
 
     fn first_unanswered_index(&self) -> Option<usize> {

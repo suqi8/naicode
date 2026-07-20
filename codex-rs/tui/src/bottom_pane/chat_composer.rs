@@ -281,9 +281,7 @@ use ratatui::style::Color;
 const LARGE_PASTE_CHAR_THRESHOLD: usize = 1000;
 
 fn user_input_too_large_message(actual_chars: usize) -> String {
-    format!(
-        "Message exceeds the maximum length of {MAX_USER_INPUT_TEXT_CHARS} characters ({actual_chars} provided)."
-    )
+    format!("消息超过最大长度 {MAX_USER_INPUT_TEXT_CHARS} 个字符（已提供 {actual_chars} 个）。")
 }
 
 /// Result returned when the user interacts with the text area.
@@ -434,13 +432,13 @@ const FOOTER_SPACING_HEIGHT: u16 = 0;
 /// Builds the one-line nudge that replaces the ambient footer without adding layout height.
 fn plan_mode_nudge_line() -> Line<'static> {
     Line::from(vec![
-        "Create a plan?".magenta(),
+        "制定计划？".magenta(),
         "  ".into(),
         key_hint::shift(KeyCode::Tab).into(),
-        " use Plan mode".into(),
+        " 使用 Plan 模式".into(),
         "   ".into(),
         key_hint::plain(KeyCode::Esc).into(),
-        " dismiss".into(),
+        " 关闭".into(),
     ])
 }
 
@@ -1086,8 +1084,8 @@ impl ChatComposer {
             .textarea
             .vim_mode_label()
             .map(|label| match label {
-                "Normal" => "Vim: Normal".magenta(),
-                "Insert" => "Vim: Insert".green(),
+                "Normal" => "Vim：普通".magenta(),
+                "Insert" => "Vim：插入".green(),
                 _ => unreachable!(),
             })
     }
@@ -2721,9 +2719,7 @@ impl ChatComposer {
                 .slash_input()
                 .validate_submission(&text, input_starts_with_space)
         {
-            let message = format!(
-                r#"Unrecognized command '/{name}'. Type "/" for a list of supported commands."#
-            );
+            let message = format!(r#"无法识别的命令 '/{name}'。输入 "/" 查看支持的命令列表。"#);
             self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
                 history_cell::new_info_event(message, /*hint*/ None),
             )));
@@ -3020,10 +3016,7 @@ impl ChatComposer {
         if !self.is_task_running || command.available_during_task() {
             return false;
         }
-        let message = format!(
-            "'/{}' is disabled while a task is in progress.",
-            command.command()
-        );
+        let message = format!("任务进行期间 '/{}' 不可用。", command.command());
         self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
             history_cell::new_error_event(message),
         )));
@@ -3217,7 +3210,7 @@ impl ChatComposer {
     fn shell_mode_footer_line(&self) -> Option<Line<'static>> {
         self.is_bang_shell_command()
             .then_some(())
-            .map(|_| Line::from(vec![Span::from("Shell mode").light_red()]))
+            .map(|_| Line::from(vec![Span::from("Shell 模式").light_red()]))
     }
 
     /// Applies any due `PasteBurst` flush at time `now`.
@@ -3842,29 +3835,29 @@ impl ChatComposer {
                     .unwrap_or((plugin.config_name.as_str(), ""));
                 let mut capability_labels = Vec::new();
                 if plugin.has_skills {
-                    capability_labels.push("skills".to_string());
+                    capability_labels.push("技能".to_string());
                 }
                 if !plugin.mcp_server_names.is_empty() {
                     let mcp_server_count = plugin.mcp_server_names.len();
                     capability_labels.push(if mcp_server_count == 1 {
-                        "1 MCP server".to_string()
+                        "1 个 MCP 服务器".to_string()
                     } else {
-                        format!("{mcp_server_count} MCP servers")
+                        format!("{mcp_server_count} 个 MCP 服务器")
                     });
                 }
                 if !plugin.app_connector_ids.is_empty() {
                     let app_count = plugin.app_connector_ids.len();
                     capability_labels.push(if app_count == 1 {
-                        "1 app".to_string()
+                        "1 个应用".to_string()
                     } else {
-                        format!("{app_count} apps")
+                        format!("{app_count} 个应用")
                     });
                 }
                 let description = plugin.description.clone().or_else(|| {
                     Some(if capability_labels.is_empty() {
-                        "Plugin".to_string()
+                        "插件".to_string()
                     } else {
-                        format!("Plugin · {}", capability_labels.join(" · "))
+                        format!("插件 · {}", capability_labels.join(" · "))
                     })
                 });
                 let mut search_terms = vec![plugin_name.to_string(), plugin.config_name.clone()];
@@ -3942,7 +3935,7 @@ impl ChatComposer {
     }
 
     pub(crate) fn show_shutdown_in_progress(&mut self) {
-        self.set_input_enabled(/*enabled*/ false, Some("Shutting down...".to_string()));
+        self.set_input_enabled(/*enabled*/ false, Some("正在关闭……".to_string()));
         self.footer.quit_shortcut_expires_at = None;
         self.footer.mode = FooterMode::ComposerEmpty;
         self.footer.hint_override = Some(Vec::new());
@@ -4517,7 +4510,7 @@ impl ChatComposer {
                 self.draft
                     .input_disabled_placeholder
                     .as_deref()
-                    .unwrap_or("Input disabled.")
+                    .unwrap_or("输入已禁用。")
                     .to_string()
             };
             if !textarea_rect.is_empty() {

@@ -5,9 +5,10 @@ use crate::terminal_palette::stdout_color_level;
 use ratatui::style::Color;
 use std::sync::OnceLock;
 
-const DEFAULT_ACCENT: (u8, u8, u8) = (0x27, 0x9c, 0xff);
-const DEFAULT_ACCENT_BRIGHT: (u8, u8, u8) = (0x86, 0xca, 0xff);
-const DEFAULT_SELECTION_BACKGROUND: (u8, u8, u8) = (0x0b, 0x20, 0x32);
+const DEFAULT_ACCENT: (u8, u8, u8) = (0x25, 0x63, 0xeb);
+const DEFAULT_ACCENT_BRIGHT: (u8, u8, u8) = (0xdb, 0xea, 0xfe);
+const DEFAULT_SELECTION_BACKGROUND: (u8, u8, u8) = DEFAULT_ACCENT;
+const DEFAULT_SELECTION_FOREGROUND: (u8, u8, u8) = DEFAULT_ACCENT_BRIGHT;
 const DEFAULT_DARK_BACKGROUND: (u8, u8, u8) = (0x07, 0x12, 0x1d);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,7 +34,7 @@ pub(crate) fn configure(accent: Option<&str>) -> Option<String> {
             None => (
                 DEFAULT_ACCENT,
                 Some(format!(
-                    "[tui].product_accent 必须是 #RRGGBB；已回退到默认深空蔚蓝 #279CFF（收到 {raw:?}）"
+                    "[tui].product_accent 必须是 #RRGGBB；已回退到默认蓝色 #2563EB（收到 {raw:?}）"
                 )),
             ),
         },
@@ -76,7 +77,11 @@ fn build_palette(accent: (u8, u8, u8), level: StdoutColorLevel) -> ProductPalett
     } else {
         DEFAULT_SELECTION_BACKGROUND
     };
-    let selection_foreground = contrast_foreground(selection_background, 4.5);
+    let selection_foreground = if custom {
+        contrast_foreground(selection_background, 4.5)
+    } else {
+        DEFAULT_SELECTION_FOREGROUND
+    };
 
     ProductPalette {
         accent: color_for_level(accent, level, Color::Blue),
@@ -181,7 +186,7 @@ mod tests {
 
     #[test]
     fn parses_only_rrggbb() {
-        assert_eq!(parse_hex_color("#279CFF"), Some(DEFAULT_ACCENT));
+        assert_eq!(parse_hex_color("#2563EB"), Some(DEFAULT_ACCENT));
         assert_eq!(parse_hex_color("279CFF"), None);
         assert_eq!(parse_hex_color("#abc"), None);
         assert_eq!(parse_hex_color("#zzzzzz"), None);
@@ -193,6 +198,15 @@ mod tests {
         assert_eq!(palette.accent, Color::Blue);
         assert_eq!(palette.accent_bright, Color::Cyan);
         assert_eq!(palette.selection_background, Color::DarkGray);
+    }
+
+    #[test]
+    fn default_palette_uses_exact_product_colors_in_truecolor() {
+        let palette = build_palette(DEFAULT_ACCENT, StdoutColorLevel::TrueColor);
+        assert_eq!(palette.accent, Color::Rgb(0x25, 0x63, 0xeb));
+        assert_eq!(palette.accent_bright, Color::Rgb(0xdb, 0xea, 0xfe));
+        assert_eq!(palette.selection_background, Color::Rgb(0x25, 0x63, 0xeb));
+        assert_eq!(palette.selection_foreground, Color::Rgb(0xdb, 0xea, 0xfe));
     }
 
     #[test]

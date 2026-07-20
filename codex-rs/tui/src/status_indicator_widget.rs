@@ -84,7 +84,7 @@ impl StatusIndicatorWidget {
         animations_enabled: bool,
     ) -> Self {
         Self {
-            header: String::from("Working"),
+            header: String::from("工作中"),
             details: None,
             details_max_lines: STATUS_DETAILS_DEFAULT_MAX_LINES,
             inline_message: None,
@@ -269,9 +269,9 @@ impl Renderable for StatusIndicatorWidget {
             && let Some(interrupt_binding) = self.interrupt_binding
         {
             spans.extend(vec![
-                format!("({pretty_elapsed} • ").dim(),
+                format!("({pretty_elapsed} • 按 ").dim(),
                 interrupt_binding.into(),
-                " to interrupt)".dim(),
+                " 中断)".dim(),
             ]);
         } else {
             spans.push(format!("({pretty_elapsed})").dim());
@@ -412,7 +412,7 @@ mod tests {
             .map(ratatui::buffer::Cell::symbol)
             .collect::<String>();
 
-        assert!(line.starts_with("Working (0s • esc to interrupt)"));
+        assert!(line.starts_with("工作中 (0s • 按 esc 中断)"));
     }
 
     #[test]

@@ -19,6 +19,7 @@ use crate::product_palette;
 use crate::render::renderable::Renderable;
 use codex_login::GroupInfo;
 use codex_login::PricingModel;
+use codex_login::format_group_ratio;
 use codex_login::format_price_value;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::buffer::Buffer;
@@ -26,6 +27,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 /// 每个模型固定占两行：模型名和高频价格摘要。
 const CARD_HEIGHT: usize = 2;
@@ -207,23 +209,36 @@ impl RelayModelPicker {
             .collect()
     }
 
-    /// 中间省略截断：`abc...xyz`，用字节长度估算字符宽度。
+    /// 中间省略截断：`abc...xyz`，按终端显示列宽计算。
     fn truncate_middle(name: &str, max_cols: usize) -> String {
-        if max_cols < 4 {
-            return name.chars().take(max_cols).collect();
+        fn take_width(chars: impl Iterator<Item = char>, width: usize) -> String {
+            let mut used = 0;
+            chars
+                .take_while(|ch| {
+                    let next = ch.width().unwrap_or(0);
+                    if used + next > width {
+                        false
+                    } else {
+                        used += next;
+                        true
+                    }
+                })
+                .collect()
         }
-        if name.len() <= max_cols {
+
+        if UnicodeWidthStr::width(name) <= max_cols {
             return name.to_string();
         }
-        let keep = max_cols.saturating_sub(3);
-        let head = keep / 2;
-        let tail = keep - head;
-        let head_str: String = name.chars().take(head).collect();
-        let all_chars: Vec<char> = name.chars().collect();
-        let tail_str: String = all_chars[all_chars.len().saturating_sub(tail)..]
-            .iter()
-            .collect();
-        format!("{head_str}...{tail_str}")
+        if max_cols < 4 {
+            return take_width(name.chars(), max_cols);
+        }
+        let keep = max_cols - 3;
+        let head_width = keep / 2;
+        let tail_width = keep - head_width;
+        let head = take_width(name.chars(), head_width);
+        let reversed_tail = take_width(name.chars().rev(), tail_width);
+        let tail: String = reversed_tail.chars().rev().collect();
+        format!("{head}...{tail}")
     }
 
     // --- 状态变更 ---
@@ -286,6 +301,7 @@ impl RelayModelPicker {
     fn detail_line(
         price: Option<&codex_login::EffectivePrice>,
         display: &codex_login::PricingDisplay,
+        ratio: Option<&codex_login::GroupRatio>,
         width: usize,
     ) -> Line<'static> {
         let palette = product_palette::current();
@@ -323,7 +339,8 @@ impl RelayModelPicker {
             fields.push(("单位", token_unit.to_string()));
         }
 
-        let mut spans = vec![Span::styled("详情  ", muted)];
+        let detail = format!("倍率 {}  ", format_group_ratio(ratio));
+        let mut spans = vec![Span::styled(detail, muted), Span::styled("详情  ", muted)];
         for (index, (label, amount)) in fields.into_iter().enumerate() {
             if index > 0 {
                 spans.push(Span::styled("  ", muted));
@@ -419,6 +436,9 @@ impl RelayModelPicker {
     }
 
     fn render_ready(&self, pricing: &codex_login::RelayPricing, area: Rect, buf: &mut Buffer) {
+        if area.width < 4 || area.height < 2 {
+            return;
+        }
         let mode = LayoutMode::from_width(area.width);
         let groups = pricing.groups();
         let group_name = self.current_group_name(&groups).unwrap_or("");
@@ -454,10 +474,13 @@ impl RelayModelPicker {
                     area.height.saturating_sub(1),
                 );
                 let palette = product_palette::current();
+                let current_group = groups.iter().find(|group| group.name == group_name);
+                let ratio =
+                    format_group_ratio(current_group.and_then(|group| group.ratio.as_ref()));
                 let header = Line::from(vec![
                     Span::styled("组: ", Style::default().fg(palette.border_muted)),
                     Span::styled(
-                        group_name.to_string(),
+                        format!("{group_name}  {ratio}"),
                         Style::default()
                             .fg(palette.accent_bright)
                             .add_modifier(Modifier::BOLD),
@@ -509,7 +532,9 @@ impl RelayModelPicker {
                 let is_cur = g.name == current_group;
                 let is_sel = selected == Some(i);
                 let marker = if is_cur { "●" } else { " " };
-                let label = format!("{marker} {}", g.name);
+                let ratio = format_group_ratio(g.ratio.as_ref());
+                let conflict = if g.ratio_conflict { "!" } else { "" };
+                let label = format!("{marker} {} {ratio}{conflict}", g.name);
                 let style = if is_sel && focused {
                     Style::default()
                         .fg(palette.selection_foreground)
@@ -616,14 +641,23 @@ impl RelayModelPicker {
         } else {
             inner_area
         };
-        self.visible_model_cards
-            .set(((list_area.height as usize) / CARD_HEIGHT).max(1));
+        let visible_cards = ((list_area.height as usize) / CARD_HEIGHT).max(1);
+        self.visible_model_cards.set(visible_cards);
 
         // 名称列可用宽度（扣去前导空格 2 列）。
         let name_max = (inner_area.width as usize).saturating_sub(2);
 
-        let scroll_top = self.model_scroll.scroll_top;
-        let sel_idx = self.model_scroll.selected_idx.unwrap_or(0);
+        let sel_idx = self
+            .model_scroll
+            .selected_idx
+            .unwrap_or(0)
+            .min(filtered.len() - 1);
+        let mut scroll_top = self.model_scroll.scroll_top.min(filtered.len() - 1);
+        if sel_idx < scroll_top {
+            scroll_top = sel_idx;
+        } else if sel_idx >= scroll_top + visible_cards {
+            scroll_top = sel_idx + 1 - visible_cards;
+        }
 
         let mut y = list_area.y;
         let y_max = list_area.y + list_area.height;
@@ -674,9 +708,15 @@ impl RelayModelPicker {
                     cell.set_style(Style::default().fg(palette.border_muted));
                 }
             }
+            let group_ratio = pricing
+                .groups()
+                .into_iter()
+                .find(|group| group.name == group_name)
+                .and_then(|group| group.ratio);
             let detail = Self::detail_line(
                 pricing.effective_price(model, group_name),
                 &pricing.display,
+                group_ratio.as_ref(),
                 detail_area.width as usize,
             );
             let detail_text_area = Rect::new(
@@ -885,10 +925,10 @@ mod tests {
         model_name: &str,
         group_prices: &[(&str, f64, f64)],
     ) -> RelayPricing {
-        let mut group_ratio: HashMap<String, f64> = HashMap::new();
+        let mut group_ratio: HashMap<String, codex_login::GroupRatio> = HashMap::new();
         let mut usable_group: HashMap<String, String> = HashMap::new();
         for g in groups {
-            group_ratio.insert(g.to_string(), 1.0);
+            group_ratio.insert(g.to_string(), 1.0.into());
             usable_group.insert(g.to_string(), g.to_string());
         }
         let mut effective_prices: HashMap<String, EffectivePrice> = HashMap::new();
@@ -973,9 +1013,18 @@ mod tests {
             result.contains("..."),
             "expected middle truncation, got: {result}"
         );
-        assert!(result.len() <= 12, "result too long: {result}");
+        assert!(
+            UnicodeWidthStr::width(result.as_str()) <= 12,
+            "result too long: {result}"
+        );
         // head and tail preserved
         assert!(result.starts_with("gpt"), "head not preserved: {result}");
+    }
+
+    #[test]
+    fn truncate_respects_unicode_display_width() {
+        let result = RelayModelPicker::truncate_middle("模型-alpha-测试", 10);
+        assert!(UnicodeWidthStr::width(result.as_str()) <= 10, "{result}");
     }
 
     #[test]
@@ -1141,6 +1190,52 @@ mod tests {
     }
 
     // --- Ready 状态：有分组有模型时正常渲染，不崩溃 ---
+
+    #[test]
+    fn tiny_areas_are_guarded() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let pricing = make_pricing(&["default"], "gpt-test", &[("default", 0.2, 1.6)]);
+        let picker = make_picker(pricing);
+        for (width, height) in [(3, 2), (4, 1)] {
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).unwrap();
+            terminal
+                .draw(|frame| picker.render(frame.area(), frame.buffer_mut()))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn resize_keeps_selected_model_visible() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let mut pricing = make_pricing(&["default"], "model-0", &[("default", 0.2, 1.6)]);
+        let template = pricing.models[0].clone();
+        pricing.models = (0..10)
+            .map(|index| PricingModel {
+                model_name: format!("model-{index}"),
+                ..template.clone()
+            })
+            .collect();
+        let mut picker = make_picker(pricing);
+        picker.focus_side = FocusSide::Models;
+        picker.model_scroll.selected_idx = Some(9);
+        picker.model_scroll.scroll_top = 0;
+
+        let backend = TestBackend::new(100, 8);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| picker.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+        let rendered = terminal.backend().to_string();
+        assert!(
+            rendered.contains("model-9"),
+            "selected model must remain visible after resize: {rendered}"
+        );
+    }
 
     #[test]
     fn ready_state_renders_without_panic() {

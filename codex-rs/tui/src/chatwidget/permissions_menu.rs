@@ -10,21 +10,15 @@ impl ChatWidget {
             .map(|profile| profile.id);
         let presets = builtin_approval_presets();
         let Some(read_only) = presets.iter().find(|preset| preset.id == "read-only") else {
-            self.add_error_message(
-                "Internal error: missing the 'read-only' approval preset.".to_string(),
-            );
+            self.add_error_message("内部错误：缺少 'read-only' 审批预设。".to_string());
             return;
         };
         let Some(default) = presets.iter().find(|preset| preset.id == "auto") else {
-            self.add_error_message(
-                "Internal error: missing the 'auto' approval preset.".to_string(),
-            );
+            self.add_error_message("内部错误：缺少 'auto' 审批预设。".to_string());
             return;
         };
         let Some(full_access) = presets.iter().find(|preset| preset.id == "full-access") else {
-            self.add_error_message(
-                "Internal error: missing the 'full-access' approval preset.".to_string(),
-            );
+            self.add_error_message("内部错误：缺少 'full-access' 审批预设。".to_string());
             return;
         };
         let mut items = vec![
@@ -72,7 +66,7 @@ impl ChatWidget {
                         profile
                             .description
                             .as_deref()
-                            .unwrap_or("Configured permission profile."),
+                            .unwrap_or("已配置的权限档案。"),
                         active_profile_id.as_deref(),
                         profile.allowed,
                     )
@@ -80,7 +74,7 @@ impl ChatWidget {
         );
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
-            title: Some("Update Model Permissions".to_string()),
+            title: Some("更新模型权限".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             header: Box::new(()),
@@ -148,7 +142,7 @@ impl ChatWidget {
                     (!self
                         .config
                         .is_permission_profile_allowed(id, &preset.permission_profile))
-                    .then(|| "Disabled by requirements.".to_string())
+                    .then(|| "因要求限制而禁用。".to_string())
                 }),
             ..Default::default()
         }
@@ -174,7 +168,7 @@ impl ChatWidget {
             is_current: active_profile_id == Some(id),
             actions: Self::permission_profile_selection_actions(selection),
             dismiss_on_select: true,
-            disabled_reason: (!allowed).then(|| "Disabled by requirements.".to_string()),
+            disabled_reason: (!allowed).then(|| "因要求限制而禁用。".to_string()),
             ..Default::default()
         }
     }

@@ -10,12 +10,12 @@ use tokio::process::Command;
 
 #[derive(Debug, Error)]
 pub(crate) enum EditorError {
-    #[error("neither VISUAL nor EDITOR is set")]
+    #[error("未设置 VISUAL 或 EDITOR")]
     MissingEditor,
     #[cfg(not(windows))]
-    #[error("failed to parse editor command")]
+    #[error("解析编辑器命令失败")]
     ParseFailed,
-    #[error("editor command is empty")]
+    #[error("编辑器命令为空")]
     EmptyCommand,
 }
 
@@ -53,7 +53,7 @@ pub(crate) fn resolve_editor_command() -> std::result::Result<Vec<String>, Edito
 /// Write `seed` to a temp file, launch the editor command, and return the updated content.
 pub(crate) async fn run_editor(seed: &str, editor_cmd: &[String]) -> Result<String> {
     if editor_cmd.is_empty() {
-        return Err(Report::msg("editor command is empty"));
+        return Err(Report::msg("编辑器命令为空"));
     }
 
     // Convert to TempPath immediately so no file handle stays open on Windows.

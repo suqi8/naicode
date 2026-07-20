@@ -99,7 +99,14 @@ impl ChatWidget {
             .iter()
             .map(|g| {
                 let model_count = pricing.models_in_group(&g.name).len();
-                let description = Some(format!("倍率 {} · {model_count} 个可用模型", g.ratio));
+                let ratio = codex_login::format_group_ratio(g.ratio.as_ref());
+                let conflict = if g.ratio_conflict {
+                    "（倍率冲突）"
+                } else {
+                    ""
+                };
+                let description =
+                    Some(format!("倍率 {ratio}{conflict} · {model_count} 个可用模型"));
                 let name = if g.desc.is_empty() {
                     g.name.clone()
                 } else {

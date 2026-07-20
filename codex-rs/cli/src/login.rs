@@ -270,10 +270,7 @@ pub async fn run_relay_login(cli_config_overrides: CliConfigOverrides) -> ! {
 
 /// naicode: 换分组。走浏览器重新授权并带上目标分组（后端复用同一 key，
 /// 只更新其 group，不新建 key）。这样本地无需长期持有 session cookie。
-pub async fn run_relay_switch_group(
-    cli_config_overrides: CliConfigOverrides,
-    group: String,
-) -> ! {
+pub async fn run_relay_switch_group(cli_config_overrides: CliConfigOverrides, group: String) -> ! {
     let config = load_config_or_exit(cli_config_overrides).await;
     let _login_log_guard = init_login_file_logging(&config);
     let codex_home = config.codex_home.clone();
@@ -524,6 +521,10 @@ pub async fn run_login_status(cli_config_overrides: CliConfigOverrides) -> ! {
             }
             AuthMode::PersonalAccessToken => {
                 eprintln!("Logged in using personal access token");
+                std::process::exit(0);
+            }
+            AuthMode::RelayOAuthTokens => {
+                eprintln!("已登录酸奶中转站");
                 std::process::exit(0);
             }
             AuthMode::BedrockApiKey => {

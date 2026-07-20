@@ -236,12 +236,12 @@ impl ChatWidget {
         header.push(*Box::new(
             Paragraph::new(if allow_unelevated {
                 vec![
-                    line!["设置 naicode 代理沙箱以保护您的文件并控制网络访问。了解更多 <https://developers.openai.com/codex/windows>"],
+                    line!["Set up the Codex agent sandbox to protect your files and control network access. Learn more <https://developers.openai.com/codex/windows>"],
                 ]
             } else {
                 vec![
-                    line!["您的组织要求使用默认 naicode 代理沙箱才能继续。设置后可保护您的文件并控制网络访问。"],
-                    line!["了解更多 <https://developers.openai.com/codex/windows>"],
+                    line!["Your organization requires the default Codex agent sandbox to continue. Set it up to protect your files and control network access."],
+                    line!["Learn more <https://developers.openai.com/codex/windows>"],
                 ]
             })
             .wrap(Wrap { trim: false }),
@@ -255,7 +255,7 @@ impl ChatWidget {
         let retry_preset = preset.clone();
         let retry_profile_selection = profile_selection.clone();
         let mut items = vec![SelectionItem {
-            name: "设置默认沙箱（需要管理员权限）".to_string(),
+            name: "Set up default sandbox (requires Administrator permissions)".to_string(),
             description: None,
             actions: vec![Box::new(move |tx| {
                 accept_otel.counter(
@@ -273,7 +273,7 @@ impl ChatWidget {
         }];
         if allow_unelevated {
             items.push(SelectionItem {
-                name: "使用非管理员沙箱（存在提示注入风险）".to_string(),
+                name: "Use non-admin sandbox (higher risk if prompt injected)".to_string(),
                 description: None,
                 actions: vec![Box::new(move |tx| {
                     legacy_otel.counter(
@@ -291,7 +291,7 @@ impl ChatWidget {
             });
         }
         items.push(SelectionItem {
-            name: "退出".to_string(),
+            name: "Quit".to_string(),
             description: None,
             actions: vec![Box::new(move |tx| {
                 quit_otel.counter(
@@ -344,20 +344,20 @@ impl ChatWidget {
             !allow_unelevated || self.elevated_windows_sandbox_setup_required();
         let mut lines = Vec::new();
         lines.push(line![
-            "无法使用管理员权限设置沙箱".bold()
+            "Couldn't set up your sandbox with Administrator permissions".bold()
         ]);
         lines.push(line![""]);
         if allow_unelevated {
             lines.push(line![
-                "您仍然可以使用非管理员沙箱运行 naicode，但存在提示注入风险。"
+                "You can still use Codex in a non-admin sandbox. It carries greater risk if prompt injected."
             ]);
         } else {
             lines.push(line![
-                "您的组织要求使用默认沙箱才能继续使用 naicode。"
+                "Your organization requires the default sandbox before Codex can continue."
             ]);
         }
         lines.push(line![
-            "了解更多 <https://developers.openai.com/codex/windows>"
+            "Learn more <https://developers.openai.com/codex/windows>"
         ]);
 
         let mut header = ColumnRenderable::new();
@@ -371,7 +371,7 @@ impl ChatWidget {
         let legacy_profile_selection = profile_selection;
         let quit_otel = self.session_telemetry.clone();
         let mut items = vec![SelectionItem {
-            name: "重新尝试设置管理员沙箱".to_string(),
+            name: "Try setting up admin sandbox again".to_string(),
             description: None,
             actions: vec![Box::new({
                 let otel = self.session_telemetry.clone();
@@ -393,7 +393,7 @@ impl ChatWidget {
         }];
         if allow_unelevated {
             items.push(SelectionItem {
-                name: "使用非管理员沙箱运行 naicode".to_string(),
+                name: "Use Codex with non-admin sandbox".to_string(),
                 description: None,
                 actions: vec![Box::new({
                     let otel = self.session_telemetry.clone();
@@ -415,7 +415,7 @@ impl ChatWidget {
             });
         }
         items.push(SelectionItem {
-            name: "退出".to_string(),
+            name: "Quit".to_string(),
             description: None,
             actions: vec![Box::new(move |tx| {
                 quit_otel.counter(

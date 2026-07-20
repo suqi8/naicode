@@ -35,9 +35,7 @@ impl ChatWidget {
                 match request_permissions_from_params(params) {
                     Ok(event) => self.on_request_permissions(event),
                     Err(err) => {
-                        self.add_error_message(format!(
-                            "failed to localize requested filesystem paths: {err}"
-                        ));
+                        self.add_error_message(format!("无法本地化请求的文件系统路径：{err}"));
                     }
                 }
             }
@@ -77,9 +75,7 @@ impl ChatWidget {
         let action = match action.try_into() {
             Ok(action) => action,
             Err(err) => {
-                self.add_error_message(format!(
-                    "failed to localize guardian filesystem paths: {err}"
-                ));
+                self.add_error_message(format!("无法本地化 guardian 文件系统路径：{err}"));
                 return;
             }
         };

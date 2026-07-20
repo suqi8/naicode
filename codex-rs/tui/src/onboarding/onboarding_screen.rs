@@ -134,6 +134,10 @@ impl OnboardingScreen {
                     forced_login_method,
                     animations_enabled: config.animations,
                     animations_suppressed: std::cell::Cell::new(false),
+                    // naicode: relay OAuth 登录写入本地凭据所需参数。
+                    codex_home: config.codex_home.to_path_buf(),
+                    cli_auth_credentials_store_mode: config.cli_auth_credentials_store_mode,
+                    auth_keyring_backend_kind: config.auth_keyring_backend_kind(),
                 }));
             } else {
                 tracing::warn!("skipping onboarding login step without app-server request handle");
@@ -612,7 +616,7 @@ async fn persist_selected_trust(
             if let Step::TrustDirectory(widget) = &mut onboarding_screen.steps[trust_step_index] {
                 widget.selection = None;
                 widget.error = Some(format!(
-                    "Failed to set trust for {}: {error}",
+                    "为 {} 设置信任失败：{error}",
                     trust_target.display()
                 ));
             }

@@ -16,8 +16,8 @@ use codex_app_server_protocol::ThreadGoalStatus;
 use codex_protocol::ThreadId;
 
 const EPHEMERAL_THREAD_GOAL_ERROR_MESSAGE: &str = concat!(
-    "Goals need a saved session. This session is temporary.\n",
-    "Run `codex` to start a saved session, or `codex resume` / `/resume` to reopen one.",
+    "目标需要已保存的会话。当前会话是临时会话。\n",
+    "请运行 `naicode` 开始一个已保存的会话，或运行 `naicode resume` / `/resume` 重新打开一个会话。",
 );
 
 impl App {
@@ -35,16 +35,14 @@ impl App {
             Ok(response) => response,
             Err(err) => {
                 self.chat_widget
-                    .add_error_message(thread_goal_error_message("read", &err));
+                    .add_error_message(thread_goal_error_message("读取", &err));
                 return;
             }
         };
 
         let Some(goal) = response.goal else {
-            self.chat_widget.add_info_message(
-                GOAL_USAGE.to_string(),
-                Some("No goal is currently set.".to_string()),
-            );
+            self.chat_widget
+                .add_info_message(GOAL_USAGE.to_string(), Some("当前未设置目标。".to_string()));
             return;
         };
 
@@ -100,7 +98,7 @@ impl App {
             Ok(response) => response,
             Err(err) => {
                 self.chat_widget
-                    .add_error_message(thread_goal_error_message("read", &err));
+                    .add_error_message(thread_goal_error_message("读取", &err));
                 return;
             }
         };
@@ -150,7 +148,7 @@ impl App {
                 },
                 Err(err) => {
                     self.chat_widget
-                        .add_error_message(thread_goal_error_message("read", &err));
+                        .add_error_message(thread_goal_error_message("读取", &err));
                     return;
                 }
             }
@@ -184,7 +182,7 @@ impl App {
                     return;
                 }
                 self.chat_widget
-                    .add_error_message(thread_goal_error_message("replace", &err));
+                    .add_error_message(thread_goal_error_message("替换", &err));
                 return;
             }
         }
@@ -209,7 +207,7 @@ impl App {
                     return;
                 }
                 self.chat_widget.add_info_message(
-                    format!("Goal {}", goal_status_label(response.goal.status)),
+                    format!("目标{}", goal_status_label(response.goal.status)),
                     Some(goal_usage_summary(&response.goal)),
                 );
                 self.chat_widget.maybe_send_next_queued_input();
@@ -219,7 +217,7 @@ impl App {
                 if self.current_displayed_thread_id() != Some(thread_id) {
                     return;
                 }
-                let action = if replacing_goal { "replace" } else { "set" };
+                let action = if replacing_goal { "替换" } else { "设置" };
                 self.chat_widget
                     .add_error_message(thread_goal_error_message(action, &err));
             }
@@ -246,12 +244,12 @@ impl App {
 
         match result {
             Ok(response) => self.chat_widget.add_info_message(
-                format!("Goal {}", goal_status_label(response.goal.status)),
+                format!("目标{}", goal_status_label(response.goal.status)),
                 Some(goal_usage_summary(&response.goal)),
             ),
             Err(err) => self
                 .chat_widget
-                .add_error_message(thread_goal_error_message("update", &err)),
+                .add_error_message(thread_goal_error_message("更新", &err)),
         }
     }
 
@@ -269,17 +267,17 @@ impl App {
             Ok(response) => {
                 if response.cleared {
                     self.chat_widget
-                        .add_info_message("Goal cleared".to_string(), /*hint*/ None);
+                        .add_info_message("已清除目标".to_string(), /*hint*/ None);
                 } else {
                     self.chat_widget.add_info_message(
-                        "No goal to clear".to_string(),
-                        Some("This thread does not currently have a goal.".to_string()),
+                        "没有可清除的目标".to_string(),
+                        Some("该线程当前没有目标。".to_string()),
                     );
                 }
             }
             Err(err) => self
                 .chat_widget
-                .add_error_message(thread_goal_error_message("clear", &err)),
+                .add_error_message(thread_goal_error_message("清除", &err)),
         }
     }
 
@@ -299,23 +297,23 @@ impl App {
         })];
         let items = vec![
             SelectionItem {
-                name: "Replace current goal".to_string(),
-                description: Some("Set the new objective and start it now".to_string()),
+                name: "替换当前目标".to_string(),
+                description: Some("设置新目标并立即开始".to_string()),
                 actions: replace_actions,
                 dismiss_on_select: true,
                 ..Default::default()
             },
             SelectionItem {
-                name: "Cancel".to_string(),
-                description: Some("Keep the current goal".to_string()),
+                name: "取消".to_string(),
+                description: Some("保留当前目标".to_string()),
                 dismiss_on_select: true,
                 ..Default::default()
             },
         ];
         self.chat_widget.show_selection_view(SelectionViewParams {
-            title: Some("Replace goal?".to_string()),
+            title: Some("替换目标？".to_string()),
             subtitle: Some(format!(
-                "New objective: {}",
+                "新目标：{}",
                 truncate_text(&objective, /*max_graphemes*/ 200)
             )),
             footer_hint: Some(standard_popup_hint_line()),
@@ -326,10 +324,10 @@ impl App {
 
     fn show_no_thread_goal_to_edit(&mut self) {
         self.chat_widget
-            .add_error_message("No goal is currently set.".to_string());
+            .add_error_message("当前未设置目标。".to_string());
         self.chat_widget.add_info_message(
             GOAL_USAGE.to_string(),
-            Some("Create a goal before editing it.".to_string()),
+            Some("请先创建目标，然后再编辑。".to_string()),
         );
     }
 }
@@ -349,7 +347,7 @@ fn thread_goal_error_message(action: &str, err: &color_eyre::Report) -> String {
     if is_ephemeral_thread_goal_error(err) {
         EPHEMERAL_THREAD_GOAL_ERROR_MESSAGE.to_string()
     } else {
-        format!("Failed to {action} thread goal: {err}")
+        format!("{action}线程目标失败：{err}")
     }
 }
 
@@ -424,8 +422,8 @@ mod tests {
             color_eyre::eyre::eyre!("server disappeared").wrap_err("thread/goal/get failed in TUI");
 
         assert_eq!(
-            thread_goal_error_message("read", &err),
-            "Failed to read thread goal: thread/goal/get failed in TUI"
+            thread_goal_error_message("读取", &err),
+            "读取线程目标失败：thread/goal/get failed in TUI"
         );
     }
 

@@ -203,7 +203,7 @@ impl WidgetRef for SkillPopup {
             &rows,
             &self.state,
             MAX_POPUP_ROWS,
-            "no matches",
+            "无匹配项",
         );
         if let Some(hint_area) = hint_area {
             let hint_area = Rect {
@@ -219,11 +219,11 @@ impl WidgetRef for SkillPopup {
 
 fn skill_popup_hint_line() -> Line<'static> {
     Line::from(vec![
-        "Press ".into(),
+        "按 ".into(),
         key_hint::plain(KeyCode::Enter).into(),
-        " to insert or ".into(),
+        " 插入，或 ".into(),
         key_hint::plain(KeyCode::Esc).into(),
-        " to close".into(),
+        " 关闭".into(),
     ])
 }
 

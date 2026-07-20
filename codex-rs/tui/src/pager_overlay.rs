@@ -470,7 +470,7 @@ impl TranscriptOverlay {
         Self {
             view: PagerView::new(
                 Self::render_cells(&transcript_cells, /*highlight_cell*/ None),
-                "T R A N S C R I P T".to_string(),
+                "会 话 记 录".to_string(),
                 usize::MAX,
                 keymap,
             ),

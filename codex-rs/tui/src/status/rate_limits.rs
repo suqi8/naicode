@@ -354,7 +354,7 @@ pub(crate) fn render_status_limit_progress_bar(percent_remaining: f64) -> String
 
 /// Formats a compact textual summary from remaining percentage.
 pub(crate) fn format_status_limit_summary(percent_remaining: f64) -> String {
-    format!("{percent_remaining:.0}% left")
+    format!("{percent_remaining:.0}% 剩余")
 }
 
 /// Builds a single `StatusRateLimitRow` for credits when the snapshot indicates

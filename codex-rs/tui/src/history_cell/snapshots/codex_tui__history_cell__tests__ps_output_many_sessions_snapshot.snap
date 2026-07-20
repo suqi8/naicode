@@ -1,10 +1,10 @@
 ---
-source: tui/src/history_cell.rs
+source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 /ps
 
-Background terminals
+后台终端
 
   • command 0
   • command 1
@@ -22,4 +22,4 @@ Background terminals
   • command 13
   • command 14
   • command 15
-  • ... and 4 more running
+  • ...另有 4 个正在运行

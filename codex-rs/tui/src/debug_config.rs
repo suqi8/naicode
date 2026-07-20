@@ -32,7 +32,7 @@ pub(crate) fn new_debug_config_output(
 
     if let Some(proxy) = session_network_proxy {
         lines.push("".into());
-        lines.push("Session runtime:".bold().into());
+        lines.push("会话运行时：".bold().into());
         lines.push("  - network_proxy".into());
         let SessionNetworkProxyRuntime {
             http_addr,
@@ -86,11 +86,7 @@ fn render_debug_config_lines(
 ) -> Vec<Line<'static>> {
     let mut lines = vec!["/debug-config".magenta().into(), "".into()];
 
-    lines.push(
-        "Config layer stack (lowest precedence first):"
-            .bold()
-            .into(),
-    );
+    lines.push("配置层栈（优先级从低到高）：".bold().into());
     let layers = stack.get_layers(
         ConfigLayerStackOrdering::LowestPrecedenceFirst,
         /*include_disabled*/ true,

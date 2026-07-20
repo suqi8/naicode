@@ -13,8 +13,6 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
-    // naicode: 酸奶中转站分组切换 + 倍率/价格查看。
-    Relay,
     Ide,
     Permissions,
     Keymap,
@@ -84,65 +82,62 @@ impl SlashCommand {
     /// User-visible description shown in the popup.
     pub fn description(self) -> &'static str {
         match self {
-            SlashCommand::Feedback => "send logs to maintainers",
-            SlashCommand::New => "start a new chat during a conversation",
-            SlashCommand::Init => "create an AGENTS.md file with instructions for Codex",
-            SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
-            SlashCommand::Review => "review my current changes and find issues",
-            SlashCommand::Rename => "rename the current thread",
-            SlashCommand::Resume => "resume a saved chat",
-            SlashCommand::Archive => "archive this session and exit",
-            SlashCommand::Delete => "permanently delete this session and exit",
-            SlashCommand::Clear => "clear the terminal and start a new chat",
-            SlashCommand::Fork => "fork the current chat",
-            SlashCommand::App => "continue this session in Codex Desktop",
-            SlashCommand::Quit | SlashCommand::Exit => "exit Codex",
-            SlashCommand::Copy => "copy last response as markdown",
-            SlashCommand::Raw => "toggle raw scrollback mode for copy-friendly terminal selection",
-            SlashCommand::Diff => "show git diff (including untracked files)",
-            SlashCommand::Mention => "mention a file",
-            SlashCommand::Skills => "use skills to improve how Codex performs specific tasks",
-            SlashCommand::Import => "import setup, this project, and recent chats from Claude Code",
-            SlashCommand::Hooks => "view and manage lifecycle hooks",
-            SlashCommand::Status => "show current session configuration and token usage",
-            SlashCommand::Usage => "view account usage or use a usage limit reset",
-            SlashCommand::DebugConfig => "show config layers and requirement sources for debugging",
-            SlashCommand::Title => "configure which items appear in the terminal title",
-            SlashCommand::Statusline => "configure which items appear in the status line",
-            SlashCommand::Theme => "choose a syntax highlighting theme",
-            SlashCommand::Pets => "choose or hide the terminal pet",
-            SlashCommand::Ps => "list background terminals",
-            SlashCommand::Stop => "stop all background terminals",
-            SlashCommand::MemoryDrop => "DO NOT USE",
-            SlashCommand::MemoryUpdate => "DO NOT USE",
-            SlashCommand::Model => "choose what model and reasoning effort to use",
-            SlashCommand::Relay => "切换酸奶中转站分组，查看各分组倍率与模型价格",
-            SlashCommand::Ide => {
-                "include current selection, open files, and other context from your IDE"
+            SlashCommand::Feedback => "将日志发送给维护者",
+            SlashCommand::New => "在对话中开启新会话",
+            SlashCommand::Init => "创建 AGENTS.md 文件，写入给 naicode 的说明",
+            SlashCommand::Compact => "总结对话以避免触及上下文上限",
+            SlashCommand::Review => "审查我当前的改动并找出问题",
+            SlashCommand::Rename => "重命名当前会话线程",
+            SlashCommand::Resume => "恢复已保存的会话",
+            SlashCommand::Archive => "归档此会话并退出",
+            SlashCommand::Delete => "永久删除此会话并退出",
+            SlashCommand::Clear => "清空终端并开启新会话",
+            SlashCommand::Fork => "复刻当前会话",
+            SlashCommand::App => "在 naicode 桌面版中继续此会话",
+            SlashCommand::Quit | SlashCommand::Exit => "退出 naicode",
+            SlashCommand::Copy => "将上一条回复复制为 markdown",
+            SlashCommand::Raw => "切换原始回滚模式，便于在终端中复制选择",
+            SlashCommand::Diff => "显示 git diff（包含未跟踪的文件）",
+            SlashCommand::Mention => "提及一个文件",
+            SlashCommand::Skills => "使用技能来提升 naicode 执行特定任务的表现",
+            SlashCommand::Import => "从 Claude Code 导入设置、此项目以及近期会话",
+            SlashCommand::Hooks => "查看和管理生命周期钩子",
+            SlashCommand::Status => "显示当前会话配置和 token 用量",
+            SlashCommand::Usage => "查看账户用量或使用一次用量上限重置",
+            SlashCommand::DebugConfig => "显示配置层级和需求来源以便调试",
+            SlashCommand::Title => "配置终端标题中显示哪些项目",
+            SlashCommand::Statusline => "配置状态栏中显示哪些项目",
+            SlashCommand::Theme => "选择语法高亮主题",
+            SlashCommand::Pets => "选择或隐藏终端宠物",
+            SlashCommand::Ps => "列出后台终端",
+            SlashCommand::Stop => "停止所有后台终端",
+            SlashCommand::MemoryDrop => "请勿使用",
+            SlashCommand::MemoryUpdate => "请勿使用",
+            SlashCommand::Model => {
+                "选择模型：先选酸奶中转站分组，再选该分组内的模型（含倍率与价格）"
             }
-            SlashCommand::Personality => "choose a communication style for Codex",
-            SlashCommand::Plan => "switch to Plan mode",
-            SlashCommand::Goal => "set or view the goal for a long-running task",
-            SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
-            SlashCommand::Side | SlashCommand::Btw => {
-                "start a side conversation in an ephemeral fork"
-            }
-            SlashCommand::Permissions => "choose what Codex is allowed to do",
-            SlashCommand::Keymap => "remap TUI shortcuts",
-            SlashCommand::Vim => "toggle Vim mode for the composer",
-            SlashCommand::ElevateSandbox => "set up elevated agent sandbox",
+            SlashCommand::Ide => "包含当前选中内容、已打开的文件以及来自 IDE 的其他上下文",
+            SlashCommand::Personality => "为 naicode 选择一种沟通风格",
+            SlashCommand::Plan => "切换到计划模式",
+            SlashCommand::Goal => "设置或查看长时间运行任务的目标",
+            SlashCommand::Agent | SlashCommand::MultiAgents => "切换当前活动的智能体线程",
+            SlashCommand::Side | SlashCommand::Btw => "在临时复刻中开启一段旁支对话",
+            SlashCommand::Permissions => "选择允许 naicode 执行哪些操作",
+            SlashCommand::Keymap => "重新映射 TUI 快捷键",
+            SlashCommand::Vim => "为输入框切换 Vim 模式",
+            SlashCommand::ElevateSandbox => "设置提权的智能体沙箱",
             SlashCommand::SandboxReadRoot => {
-                "let sandbox read a directory: /sandbox-add-read-dir <absolute_path>"
+                "让沙箱可读取某个目录：/sandbox-add-read-dir <absolute_path>"
             }
-            SlashCommand::Experimental => "toggle experimental features",
-            SlashCommand::AutoReview => "approve one retry of a recent auto-review denial",
-            SlashCommand::Memories => "configure memory use and generation",
-            SlashCommand::Mcp => "list configured MCP tools; use /mcp verbose for details",
-            SlashCommand::Apps => "manage apps",
-            SlashCommand::Plugins => "browse plugins",
-            SlashCommand::Logout => "log out of Codex",
-            SlashCommand::Rollout => "print the rollout file path",
-            SlashCommand::TestApproval => "test approval request",
+            SlashCommand::Experimental => "切换实验性功能",
+            SlashCommand::AutoReview => "批准对近期自动审查拒绝的一次重试",
+            SlashCommand::Memories => "配置记忆的使用与生成",
+            SlashCommand::Mcp => "列出已配置的 MCP 工具；使用 /mcp verbose 查看详情",
+            SlashCommand::Apps => "管理应用",
+            SlashCommand::Plugins => "浏览插件",
+            SlashCommand::Logout => "退出 naicode 登录",
+            SlashCommand::Rollout => "打印 rollout 文件路径",
+            SlashCommand::TestApproval => "测试审批请求",
         }
     }
 
@@ -208,8 +203,7 @@ impl SlashCommand {
             | SlashCommand::Clear
             | SlashCommand::Logout
             | SlashCommand::MemoryDrop
-            | SlashCommand::MemoryUpdate
-            | SlashCommand::Relay => false,
+            | SlashCommand::MemoryUpdate => false,
             SlashCommand::Diff
             | SlashCommand::Resume
             | SlashCommand::Model

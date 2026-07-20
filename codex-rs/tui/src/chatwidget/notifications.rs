@@ -37,27 +37,24 @@ impl Notification {
         match self {
             Notification::AgentTurnComplete { response } => {
                 Notification::agent_turn_preview(response)
-                    .unwrap_or_else(|| "Agent turn complete".to_string())
+                    .unwrap_or_else(|| "智能体回合已完成".to_string())
             }
             Notification::ExecApprovalRequested { command } => {
-                format!(
-                    "Approval requested: {}",
-                    truncate_text(command, /*max_graphemes*/ 30)
-                )
+                format!("请求审批：{}", truncate_text(command, /*max_graphemes*/ 30))
             }
             Notification::EditApprovalRequested { cwd, changes } => {
                 format!(
-                    "Codex wants to edit {}",
+                    "naicode 想要编辑 {}",
                     if changes.len() == 1 {
                         #[allow(clippy::unwrap_used)]
                         display_path_for(changes.first().unwrap(), cwd)
                     } else {
-                        format!("{} files", changes.len())
+                        format!("{} 个文件", changes.len())
                     }
                 )
             }
             Notification::ElicitationRequested { server_name } => {
-                format!("Approval requested by {server_name}")
+                format!("{server_name} 请求审批")
             }
             Notification::PlanModePrompt { title } => {
                 format!("Plan mode prompt: {title}")

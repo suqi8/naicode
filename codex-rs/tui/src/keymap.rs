@@ -1676,9 +1676,9 @@ impl RuntimeKeymap {
                         continue;
                     }
                     return Err(format!(
-                        "Ambiguous approval overlay keymap bindings: `{previous}` and `{action}` use the same key. \
-Set unique keys in `~/.codex/config.toml` and retry. \
-See the Codex keymap documentation for supported actions and examples."
+                        "审批浮层按键映射存在歧义：`{previous}` 和 `{action}` 使用了相同的按键。\
+请在 `~/.codex/config.toml` 中设置唯一的按键后重试。\
+支持的操作和示例请参见 naicode 按键映射文档。"
                     ));
                 }
             }
@@ -1702,9 +1702,9 @@ fn validate_unique<const N: usize>(
             let key = binding.parts();
             if let Some(previous) = seen.insert(key, action) {
                 return Err(format!(
-                    "Ambiguous `tui.keymap.{context}` bindings: `{previous}` and `{action}` use the same key. \
-Set unique keys in `~/.codex/config.toml` and retry. \
-See the Codex keymap documentation for supported actions and examples."
+                    "`tui.keymap.{context}` 的按键映射存在歧义：`{previous}` 和 `{action}` 使用了相同的按键。\
+请在 `~/.codex/config.toml` 中设置唯一的按键后重试。\
+支持的操作和示例请参见 naicode 按键映射文档。"
                 ));
             }
         }
@@ -1738,9 +1738,9 @@ fn validate_no_shadow_with_allowed_overlaps<const N: usize, const M: usize, cons
                     continue;
                 }
                 return Err(format!(
-                    "Ambiguous `tui.keymap.{context}` bindings: `{previous}` shadows `{action}` with the same key. \
-Set unique keys in `~/.codex/config.toml` and retry. \
-See the Codex keymap documentation for supported actions and examples."
+                    "`tui.keymap.{context}` 的按键映射存在歧义：`{previous}` 用相同的按键覆盖了 `{action}`。\
+请在 `~/.codex/config.toml` 中设置唯一的按键后重试。\
+支持的操作和示例请参见 naicode 按键映射文档。"
                 ));
             }
         }
@@ -1771,9 +1771,9 @@ fn validate_no_reserved<const N: usize, const A: usize>(
                     continue;
                 }
                 return Err(format!(
-                    "Ambiguous `tui.keymap.{context}` bindings: `{action}` uses a key reserved by `{reserved_action}`. \
-Set a different key in `~/.codex/config.toml` and retry. \
-See the Codex keymap documentation for supported actions and examples."
+                    "`tui.keymap.{context}` 的按键映射存在歧义：`{action}` 使用了被 `{reserved_action}` 保留的按键。\
+请在 `~/.codex/config.toml` 中换用其他按键后重试。\
+支持的操作和示例请参见 naicode 按键映射文档。"
                 ));
             }
         }
@@ -1950,8 +1950,8 @@ fn parse_bindings(spec: &KeybindingsSpec, path: &str) -> Result<Vec<KeyBinding>,
     for raw in spec.specs() {
         let binding = parse_keybinding(raw.as_str()).ok_or_else(|| {
             format!(
-                "Invalid `{path}` = `{}`. Use values like `ctrl-a`, `shift-enter`, or `page-down`. \
-See the Codex keymap documentation for supported actions and examples.",
+                "无效的 `{path}` = `{}`。请使用类似 `ctrl-a`、`shift-enter` 或 `page-down` 的值。\
+支持的操作和示例请参见 naicode 按键映射文档。",
                 raw.as_str()
             )
         })?;

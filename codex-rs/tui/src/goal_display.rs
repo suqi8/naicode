@@ -2,7 +2,7 @@ use crate::status::format_tokens_compact;
 use codex_app_server_protocol::ThreadGoal;
 use codex_app_server_protocol::ThreadGoalStatus;
 
-pub(crate) const GOAL_USAGE: &str = "Usage: /goal [<objective>|clear|edit|pause|resume]";
+pub(crate) const GOAL_USAGE: &str = "用法：/goal [<目标>|clear|edit|pause|resume]";
 
 pub(crate) fn format_goal_elapsed_seconds(seconds: i64) -> String {
     let seconds = seconds.max(0) as u64;
@@ -32,26 +32,26 @@ pub(crate) fn format_goal_elapsed_seconds(seconds: i64) -> String {
 
 pub(crate) fn goal_status_label(status: ThreadGoalStatus) -> &'static str {
     match status {
-        ThreadGoalStatus::Active => "active",
-        ThreadGoalStatus::Paused => "paused",
-        ThreadGoalStatus::Blocked => "blocked",
-        ThreadGoalStatus::UsageLimited => "usage limited",
-        ThreadGoalStatus::BudgetLimited => "limited by budget",
-        ThreadGoalStatus::Complete => "complete",
+        ThreadGoalStatus::Active => "进行中",
+        ThreadGoalStatus::Paused => "已暂停",
+        ThreadGoalStatus::Blocked => "已阻塞",
+        ThreadGoalStatus::UsageLimited => "用量受限",
+        ThreadGoalStatus::BudgetLimited => "预算受限",
+        ThreadGoalStatus::Complete => "已完成",
     }
 }
 
 pub(crate) fn goal_usage_summary(goal: &ThreadGoal) -> String {
-    let mut parts = vec![format!("Objective: {}", goal.objective)];
+    let mut parts = vec![format!("目标：{}", goal.objective)];
     if goal.time_used_seconds > 0 {
         parts.push(format!(
-            "Time: {}.",
+            "用时：{}。",
             format_goal_elapsed_seconds(goal.time_used_seconds)
         ));
     }
     if let Some(token_budget) = goal.token_budget {
         parts.push(format!(
-            "Tokens: {}/{}.",
+            "令牌：{}/{}。",
             format_tokens_compact(goal.tokens_used),
             format_tokens_compact(token_budget)
         ));
@@ -105,7 +105,7 @@ mod tests {
                 /*token_budget*/ Some(50_000),
                 /*tokens_used*/ 63_876,
             )),
-            "Objective: Complete the task described in ../gameboy-long-running-prompt5.txt Time: 2m. Tokens: 63.9K/50K."
+            "目标：Complete the task described in ../gameboy-long-running-prompt5.txt 用时：2m。 令牌：63.9K/50K。"
         );
     }
 }

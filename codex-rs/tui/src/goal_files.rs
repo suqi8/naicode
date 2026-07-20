@@ -37,7 +37,7 @@ pub(crate) async fn materialize_goal_draft(
 ) -> Result<(String, Option<GoalFilePath>)> {
     let mut objective = draft.objective;
     if objective.trim().is_empty() {
-        bail!("Goal objective must not be empty.");
+        bail!("目标不能为空。");
     }
     let text_elements = draft.text_elements;
     if !draft.pending_pastes.is_empty() {
@@ -47,7 +47,7 @@ pub(crate) async fn materialize_goal_draft(
             &draft.pending_pastes,
         );
         if expanded_objective.trim().is_empty() {
-            bail!("Goal objective must not be empty.");
+            bail!("目标不能为空。");
         }
     }
 
@@ -93,7 +93,7 @@ pub(crate) async fn materialize_goal_draft(
             .await?
             .join(format!("image-{}.{}", idx + 1, extension));
         let bytes = fs::read(&image.path)
-            .with_context(|| format!("Could not read goal image {}", image.path.display()))?;
+            .with_context(|| format!("无法读取目标图片 {}", image.path.display()))?;
         write_goal_file(app_server, path.clone(), bytes).await?;
         if image.placeholder.is_empty() {
             image_lines.push(format!("- [Image #{}]: {path}", idx + 1));
@@ -149,9 +149,8 @@ pub(crate) async fn objective_text_for_edit(
         .fs_read_file_path(&path)
         .await
         .map_err(|err| anyhow::anyhow!("{err}"))
-        .with_context(|| format!("Could not read goal objective file {path}"))?;
-    String::from_utf8(bytes)
-        .with_context(|| format!("Goal objective file {path} is not valid UTF-8"))
+        .with_context(|| format!("无法读取目标文件 {path}"))?;
+    String::from_utf8(bytes).with_context(|| format!("目标文件 {path} 不是有效的 UTF-8"))
 }
 
 pub(crate) fn objective_file_path(
@@ -176,7 +175,7 @@ pub(crate) fn objective_file_reference(path: &GoalFilePath) -> Result<String> {
     let actual_chars = reference.chars().count();
     if actual_chars > MAX_THREAD_GOAL_OBJECTIVE_CHARS {
         bail!(
-            "Goal objective file reference is too long: {actual_chars} characters. Limit: {MAX_THREAD_GOAL_OBJECTIVE_CHARS} characters."
+            "目标文件引用过长：{actual_chars} 个字符。上限：{MAX_THREAD_GOAL_OBJECTIVE_CHARS} 个字符。"
         );
     }
     Ok(reference)
@@ -190,8 +189,7 @@ async fn ensure_goal_output_dir(
     if let Some(output_dir) = output_dir {
         return Ok(output_dir.clone());
     }
-    let codex_home = codex_home
-        .context("App server did not report $CODEX_HOME; cannot materialize goal files")?;
+    let codex_home = codex_home.context("App server 未报告 $CODEX_HOME；无法生成目标文件")?;
     let path = codex_home
         .join(GOAL_ATTACHMENT_DIR)
         .join(Uuid::new_v4().to_string());
@@ -199,7 +197,7 @@ async fn ensure_goal_output_dir(
         .fs_create_directory_all_path(&path)
         .await
         .map_err(|err| anyhow::anyhow!("{err}"))
-        .with_context(|| format!("Could not create goal attachment directory {path}"))?;
+        .with_context(|| format!("无法创建目标附件目录 {path}"))?;
     *output_dir = Some(path.clone());
     Ok(path)
 }
@@ -213,7 +211,7 @@ async fn write_goal_file(
         .fs_write_file_path(&path, bytes)
         .await
         .map_err(|err| anyhow::anyhow!("{err}"))
-        .with_context(|| format!("Could not write goal file {path}"))
+        .with_context(|| format!("无法写入目标文件 {path}"))
 }
 fn append_section(objective: &mut String, heading: &str, lines: Vec<String>) {
     if lines.is_empty() {

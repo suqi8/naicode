@@ -46,9 +46,8 @@ use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 
-const NO_PREVIOUS_MESSAGE_TO_EDIT: &str = "No previous message to edit.";
-pub(crate) const SIDE_EDIT_PREVIOUS_UNAVAILABLE_MESSAGE: &str =
-    "Editing previous prompts is unavailable in side conversations.";
+const NO_PREVIOUS_MESSAGE_TO_EDIT: &str = "没有可编辑的历史消息。";
+pub(crate) const SIDE_EDIT_PREVIOUS_UNAVAILABLE_MESSAGE: &str = "旁支会话中无法编辑历史提示。";
 
 /// Aggregates all backtrack-related state used by the App.
 #[derive(Default)]
@@ -207,7 +206,7 @@ impl App {
 
         if self.backtrack.pending_rollback.is_some() {
             self.chat_widget
-                .add_error_message("Backtrack rollback already in progress.".to_string());
+                .add_error_message("回溯回滚正在进行中。".to_string());
             return;
         }
 
@@ -255,7 +254,7 @@ impl App {
         if user_total == 0 {
             if self.backtrack.pending_rollback.is_some() {
                 self.chat_widget
-                    .add_error_message("Backtrack rollback already in progress.".to_string());
+                    .add_error_message("回溯回滚正在进行中。".to_string());
                 return;
             }
             self.backtrack.pending_rollback = Some(PendingBacktrackRollback {

@@ -40,7 +40,7 @@ pub(crate) enum StatusSurfacePreviewItem {
 impl StatusSurfacePreviewItem {
     fn placeholder(self) -> &'static str {
         match self {
-            StatusSurfacePreviewItem::AppName => "codex",
+            StatusSurfacePreviewItem::AppName => "naicode",
             StatusSurfacePreviewItem::ProjectName => "my-project",
             StatusSurfacePreviewItem::ProjectRoot => "my-project",
             StatusSurfacePreviewItem::CurrentDir => "~/my-project/subdir",
@@ -244,37 +244,37 @@ fn rate_limit_preview_copy(value: &str) -> Option<RateLimitPreviewCopy> {
     if value.starts_with("secondary usage ") {
         Some(RateLimitPreviewCopy {
             name: "secondary-usage-limit",
-            description: "Remaining usage on the secondary usage limit (omitted when unavailable)",
+            description: "次用量限额的剩余用量（不可用时省略）",
         })
     } else if value.starts_with("usage ") {
         Some(RateLimitPreviewCopy {
             name: "usage-limit",
-            description: "Remaining usage on the primary usage limit (omitted when unavailable)",
+            description: "主用量限额的剩余用量（不可用时省略）",
         })
     } else if value.starts_with("5h ") {
         Some(RateLimitPreviewCopy {
             name: "five-hour-limit",
-            description: "Remaining usage on the 5-hour usage limit (omitted when unavailable)",
+            description: "5 小时用量限额的剩余用量（不可用时省略）",
         })
     } else if value.starts_with("daily ") {
         Some(RateLimitPreviewCopy {
             name: "daily-limit",
-            description: "Remaining usage on the daily usage limit (omitted when unavailable)",
+            description: "每日用量限额的剩余用量（不可用时省略）",
         })
     } else if value.starts_with("weekly ") {
         Some(RateLimitPreviewCopy {
             name: "weekly-limit",
-            description: "Remaining usage on the weekly usage limit (omitted when unavailable)",
+            description: "每周用量限额的剩余用量（不可用时省略）",
         })
     } else if value.starts_with("monthly ") {
         Some(RateLimitPreviewCopy {
             name: "monthly-limit",
-            description: "Remaining usage on the monthly usage limit (omitted when unavailable)",
+            description: "每月用量限额的剩余用量（不可用时省略）",
         })
     } else if value.starts_with("annual ") {
         Some(RateLimitPreviewCopy {
             name: "annual-limit",
-            description: "Remaining usage on the annual usage limit (omitted when unavailable)",
+            description: "每年用量限额的剩余用量（不可用时省略）",
         })
     } else {
         None
