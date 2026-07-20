@@ -146,7 +146,9 @@ jobs:
 
   build-macos-x64:
     needs: tag-check
-    runs-on: macos-13
+    # macos-13 no longer receives a hosted Intel runner. Use the supported
+    # Intel image so this job can be retried without touching other targets.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
         with:
