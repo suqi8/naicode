@@ -68,10 +68,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          for pkg_dir in npm-staging/naicode-linux-* \
-                         npm-staging/naicode-darwin-* \
-                         npm-staging/naicode-win32-*; do
-            [[ -d "$pkg_dir" ]] || continue
-            npm publish "$pkg_dir" --access public
+          for tarball in dist/npm/codex-npm-*.tgz; do
+            npm publish "$tarball" --access public
           done
-          npm publish npm-staging/naicode --access public
