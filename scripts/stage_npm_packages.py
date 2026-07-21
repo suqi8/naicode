@@ -26,7 +26,6 @@ BINARY_TARGETS = (
     "x86_64-apple-darwin",
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
-    "aarch64-pc-windows-msvc",
 )
 
 _SPEC = importlib.util.spec_from_file_location("codex_build_npm_package", BUILD_SCRIPT)
@@ -35,8 +34,19 @@ if _SPEC is None or _SPEC.loader is None:
 _BUILD_MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_BUILD_MODULE)
 PACKAGE_NATIVE_COMPONENTS = getattr(_BUILD_MODULE, "PACKAGE_NATIVE_COMPONENTS", {})
-PACKAGE_EXPANSIONS = getattr(_BUILD_MODULE, "PACKAGE_EXPANSIONS", {})
-CODEX_PLATFORM_PACKAGES = getattr(_BUILD_MODULE, "CODEX_PLATFORM_PACKAGES", {})
+_all_platform_packages = getattr(_BUILD_MODULE, "CODEX_PLATFORM_PACKAGES", {})
+_supported_targets = set(BINARY_TARGETS)
+_BUILD_MODULE.CODEX_PLATFORM_PACKAGES = {
+    name: config
+    for name, config in _all_platform_packages.items()
+    if config["target_triple"] in _supported_targets
+}
+_BUILD_MODULE.PACKAGE_EXPANSIONS = {
+    **getattr(_BUILD_MODULE, "PACKAGE_EXPANSIONS", {}),
+    "codex": ["codex", *_BUILD_MODULE.CODEX_PLATFORM_PACKAGES],
+}
+PACKAGE_EXPANSIONS = _BUILD_MODULE.PACKAGE_EXPANSIONS
+CODEX_PLATFORM_PACKAGES = _BUILD_MODULE.CODEX_PLATFORM_PACKAGES
 CODEX_PACKAGE_COMPONENT = getattr(
     _BUILD_MODULE, "CODEX_PACKAGE_COMPONENT", "codex-package"
 )
