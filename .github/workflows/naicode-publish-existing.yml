@@ -68,7 +68,20 @@ jobs:
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          for tarball in dist/npm/codex-npm-*.tgz; do
-            npm publish "$tarball" --access public
+          publish_tarball() {
+            local tarball="$1"
+            local identity
+            identity="$(tar -xOf "$tarball" package/package.json | node -e 'let s=""; process.stdin.on("data", d => s += d).on("end", () => { const p = JSON.parse(s); process.stdout.write(`${p.name}@${p.version}`); })')"
+            if npm view "$identity" version >/dev/null 2>&1; then
+              echo "Already published: $identity"
+            else
+              npm publish "$tarball" --access public
+            fi
+          }
+          version="${RELEASE_TAG#rust-v}"
+          publish_tarball "dist/npm/codex-npm-${version}.tgz"
+          for tarball in dist/npm/codex-npm-darwin-*.tgz dist/npm/codex-npm-win32-*.tgz; do
+            publish_tarball "$tarball"
           done
