@@ -50,7 +50,7 @@ CODEX_PLATFORM_PACKAGES: dict[str, dict[str, str]] = {
         "cpu": "arm64",
     },
     "codex-win32-x64": {
-        "npm_name": "naicode-win32-x64",
+        "npm_name": "naicode-platform-win32-x64",
         "npm_tag": "win32-x64",
         "target_triple": "x86_64-pc-windows-msvc",
         "os": "win32",
