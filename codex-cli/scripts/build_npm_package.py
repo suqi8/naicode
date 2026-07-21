@@ -18,8 +18,8 @@ CODEX_SDK_ROOT = REPO_ROOT / "sdk" / "typescript"
 CODEX_NPM_NAME = "naicode"
 CODEX_PACKAGE_COMPONENT = "codex-package"
 
-# `npm_name` is the local optional-dependency alias consumed by `bin/codex.js`.
-# The underlying package published to npm is always `naicode`.
+# `npm_name` is both the published platform package name and the local
+# optional-dependency name consumed by `bin/codex.js`.
 CODEX_PLATFORM_PACKAGES: dict[str, dict[str, str]] = {
     "codex-linux-x64": {
         "npm_name": "naicode-linux-x64",
@@ -242,9 +242,6 @@ def stage_sources(staging_dir: Path, version: str, package: str) -> None:
         package_json_path = CODEX_CLI_ROOT / "package.json"
     elif package in CODEX_PLATFORM_PACKAGES:
         platform_package = CODEX_PLATFORM_PACKAGES[package]
-        platform_npm_tag = platform_package["npm_tag"]
-        platform_version = compute_platform_package_version(version, platform_npm_tag)
-
         readme_src = REPO_ROOT / "README.md"
         if readme_src.exists():
             shutil.copy2(readme_src, staging_dir / "README.md")
@@ -253,8 +250,8 @@ def stage_sources(staging_dir: Path, version: str, package: str) -> None:
             codex_package_json = json.load(fh)
 
         package_json = {
-            "name": CODEX_NPM_NAME,
-            "version": platform_version,
+            "name": platform_package["npm_name"],
+            "version": version,
             "license": codex_package_json.get("license", "Apache-2.0"),
             "os": [platform_package["os"]],
             "cpu": [platform_package["cpu"]],
@@ -294,10 +291,7 @@ def stage_sources(staging_dir: Path, version: str, package: str) -> None:
     if package == "codex":
         package_json["files"] = ["bin/codex.js"]
         package_json["optionalDependencies"] = {
-            CODEX_PLATFORM_PACKAGES[platform_package]["npm_name"]: (
-                f"npm:{CODEX_NPM_NAME}@"
-                f"{compute_platform_package_version(version, CODEX_PLATFORM_PACKAGES[platform_package]['npm_tag'])}"
-            )
+            CODEX_PLATFORM_PACKAGES[platform_package]["npm_name"]: version
             for platform_package in PACKAGE_EXPANSIONS["codex"]
             if platform_package != "codex"
         }
@@ -316,12 +310,6 @@ def stage_sources(staging_dir: Path, version: str, package: str) -> None:
     with open(staging_dir / "package.json", "w", encoding="utf-8") as out:
         json.dump(package_json, out, indent=2)
         out.write("\n")
-
-
-def compute_platform_package_version(version: str, platform_tag: str) -> str:
-    # npm forbids republishing the same package name/version, so each
-    # platform-specific tarball needs a unique version string.
-    return f"{version}-{platform_tag}"
 
 
 def run_command(cmd: list[str], cwd: Path | None = None) -> None:
