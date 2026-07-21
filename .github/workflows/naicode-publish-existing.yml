@@ -63,10 +63,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || {
-            mapfile -t release_files < <(find dist -type f -not -path 'dist/npm/*')
-            gh release create "$RELEASE_TAG" "${release_files[@]}" --generate-notes
-          }
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --generate-notes
 
       - name: Publish to npm
         env:
