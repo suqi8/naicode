@@ -355,6 +355,12 @@ def install_single_codex_package_archive(
     artifact_subdir = artifact_dir_for_target(artifacts_dir, target)
     archive_path = artifact_subdir / f"codex-package-{target}.tar.gz"
     if not archive_path.exists():
+        versioned_archives = sorted(
+            artifact_subdir.glob(f"codex-package-*-{target}.tar.gz")
+        )
+        if len(versioned_archives) == 1:
+            archive_path = versioned_archives[0]
+    if not archive_path.exists():
         raise FileNotFoundError(f"Expected package archive not found: {archive_path}")
 
     dest_dir = vendor_dir / target
