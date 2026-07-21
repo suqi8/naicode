@@ -1,0 +1,77 @@
+name: naicode-publish-existing
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Completed NaiCode release run containing platform artifacts"
+        required: true
+        type: string
+      release_tag:
+        description: "Release tag and npm version source, for example rust-v1.2.8086"
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: naicode
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download existing build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          path: dist
+          pattern: "{x86_64,aarch64}-*"
+
+      - name: Stage npm packages
+        env:
+          VERSION: ${{ inputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver="${VERSION#rust-v}"
+          python3 scripts/stage_npm_packages.py \
+            --release-version "$ver" \
+            --artifacts-dir "${GITHUB_WORKSPACE}/dist" \
+            --package codex
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ inputs.release_tag }}
+          tag_name: ${{ inputs.release_tag }}
+          generate_release_notes: true
+          files: dist/**
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for pkg_dir in npm-staging/naicode-linux-* \
+                         npm-staging/naicode-darwin-* \
+                         npm-staging/naicode-win32-*; do
+            [[ -d "$pkg_dir" ]] || continue
+            npm publish "$pkg_dir" --access public
+          done
+          npm publish npm-staging/naicode --access public
