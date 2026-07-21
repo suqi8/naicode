@@ -301,9 +301,34 @@ impl RelayModelPicker {
         };
         let groups = pricing.picker_groups();
         let idx = self.group_scroll.selected_idx.unwrap_or(0);
-        if let Some(g) = groups.get(idx) {
-            if self.selected_group.as_deref() != Some(g.key.as_str()) {
-                self.selected_group = Some(g.key.clone());
+        // Keep the legacy real-group index mapping when an older session
+        // restored a concrete group key. This preserves group switching for
+        // existing state while new sessions use policy/type entries.
+        let legacy_groups = self
+            .selected_group
+            .as_deref()
+            .is_some_and(|key| {
+                key.starts_with("group:")
+                    || pricing.groups().iter().any(|g| g.key == key || g.name == key)
+            });
+        let real_groups = pricing.groups();
+        let target = if legacy_groups {
+            real_groups.get(idx).or_else(|| groups.get(idx))
+        } else {
+            groups.get(idx)
+        };
+        if let Some(g) = target {
+            let next_key = if legacy_groups && !self
+                .selected_group
+                .as_deref()
+                .is_some_and(|key| key.starts_with("group:"))
+            {
+                g.name.clone()
+            } else {
+                g.key.clone()
+            };
+            if self.selected_group.as_deref() != Some(next_key.as_str()) {
+                self.selected_group = Some(next_key);
                 // 切组时重置模型游标（保留 search_query）。
                 self.model_scroll = ScrollState::new();
                 self.model_scroll.selected_idx = Some(0);
