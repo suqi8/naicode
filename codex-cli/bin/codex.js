@@ -18,7 +18,7 @@ const PLATFORM_PACKAGE_BY_TARGET = {
   "aarch64-unknown-linux-musl": "naicode-linux-arm64",
   "x86_64-apple-darwin": "naicode-darwin-x64",
   "aarch64-apple-darwin": "naicode-darwin-arm64",
-  "x86_64-pc-windows-msvc": "naicode-win32-x64",
+  "x86_64-pc-windows-msvc": "naicode-platform-win32-x64",
   "aarch64-pc-windows-msvc": "naicode-win32-arm64",
 };
 
