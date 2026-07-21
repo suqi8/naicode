@@ -18,7 +18,7 @@ from typing import Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_SCRIPT = REPO_ROOT / "codex-cli" / "scripts" / "build_npm_package.py"
-WORKFLOW_NAME = ".github/workflows/rust-release.yml"
+WORKFLOW_NAME = ".github/workflows/naicode-release.yml"
 GITHUB_REPO = "suqi8/naicode"
 BINARY_TARGETS = (
     "x86_64-unknown-linux-musl",

@@ -250,6 +250,7 @@ jobs:
       - name: Stage npm packages
         env:
           VERSION: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           ver="${VERSION#rust-v}"
           python3 scripts/stage_npm_packages.py \
