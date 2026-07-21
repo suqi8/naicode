@@ -90,9 +90,10 @@ use codex_terminal_detection::TerminalName;
 
 /// naicode CLI —— 酸奶中转站专用命令行编程助手
 ///
-/// If no subcommand is specified, options will be forwarded to the interactive CLI.
+/// 未指定子命令时，参数将传递给 NaiCode 交互界面。
 #[derive(Debug, Parser)]
 #[clap(
+    name = "naicode",
     author,
     version,
     // If a sub‑command is given, ignore requirements of the default args.
@@ -122,77 +123,77 @@ struct MultitoolCli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
-    /// Run Codex non-interactively.
+    /// 非交互方式运行 NaiCode。
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
 
-    /// Run a code review non-interactively.
+    /// 非交互方式执行代码审查。
     Review(ReviewCommand),
 
-    /// Manage login.
+    /// 管理登录状态。
     Login(LoginCommand),
 
-    /// Remove stored authentication credentials.
+    /// 删除已保存的登录凭据。
     Logout(LogoutCommand),
 
-    /// Manage external MCP servers for Codex.
+    /// 管理 NaiCode 使用的外部 MCP 服务器。
     Mcp(McpCli),
 
-    /// Manage Codex plugins.
+    /// 管理 NaiCode 插件。
     Plugin(PluginCli),
 
-    /// Start Codex as an MCP server (stdio).
+    /// 将 NaiCode 作为 MCP 服务器启动（stdio）。
     McpServer(McpServerCommand),
 
-    /// [experimental] Run the app server or related tooling.
+    /// [实验功能] 运行应用服务器或相关工具。
     AppServer(AppServerCommand),
 
-    /// [experimental] Manage the app-server daemon with remote control enabled.
+    /// [实验功能] 管理支持远程控制的应用服务器守护进程。
     RemoteControl(RemoteControlCommand),
 
-    /// Launch the Codex desktop app (opens the app installer if missing).
+    /// 启动 NaiCode 桌面应用（未安装时打开安装程序）。
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     App(app_cmd::AppCommand),
 
-    /// Generate shell completion scripts.
+    /// 生成 Shell 自动补全脚本。
     Completion(CompletionCommand),
 
-    /// Update Codex to the latest version.
+    /// 将 NaiCode 更新到最新版本。
     Update,
 
-    /// Diagnose local Codex installation, config, auth, and runtime health.
+    /// 检查 NaiCode 的安装、配置、登录和运行状态。
     Doctor(DoctorCommand),
 
-    /// Run commands within a Codex-provided sandbox.
+    /// 在 NaiCode 提供的沙箱中运行命令。
     Sandbox(HostSandboxArgs),
 
-    /// Debugging tools.
+    /// 调试工具。
     Debug(DebugCommand),
 
     /// Execpolicy tooling.
     #[clap(hide = true)]
     Execpolicy(ExecpolicyCommand),
 
-    /// Apply the latest diff produced by Codex agent as a `git apply` to your local working tree.
+    /// 使用 `git apply` 将 NaiCode 最近生成的差异应用到当前工作区。
     #[clap(visible_alias = "a")]
     Apply(ApplyCommand),
 
-    /// Resume a previous interactive session (picker by default; use --last to continue the most recent).
+    /// 恢复之前的交互会话（默认打开选择器，使用 --last 恢复最近会话）。
     Resume(ResumeCommand),
 
-    /// Archive a saved session by id or session name.
+    /// 按 ID 或名称归档已保存的会话。
     Archive(SessionArchiveCommand),
 
-    /// Permanently delete a saved session by id or session name.
+    /// 按 ID 或名称永久删除已保存的会话。
     Delete(DeleteCommand),
 
-    /// Unarchive a saved session by id or session name.
+    /// 按 ID 或名称取消归档会话。
     Unarchive(SessionArchiveCommand),
 
-    /// Fork a previous interactive session (picker by default; use --last to fork the most recent).
+    /// 从之前的会话创建分支（默认打开选择器，使用 --last 选择最近会话）。
     Fork(ForkCommand),
 
-    /// [EXPERIMENTAL] Browse tasks from Codex Cloud and apply changes locally.
+    /// [实验功能] 浏览 Codex Cloud 任务并在本地应用更改。
     #[clap(name = "cloud", alias = "cloud-tasks")]
     Cloud(CloudTasksCli),
 
@@ -204,16 +205,16 @@ enum Subcommand {
     #[clap(hide = true, name = "stdio-to-uds")]
     StdioToUds(StdioToUdsCommand),
 
-    /// [EXPERIMENTAL] Run the standalone exec-server service.
+    /// [实验功能] 运行独立的执行服务器。
     ExecServer(ExecServerCommand),
 
-    /// Inspect feature flags.
+    /// 查看功能开关。
     Features(FeaturesCli),
 }
 
 #[derive(Debug, Parser)]
 struct CompletionCommand {
-    /// Shell to generate completions for
+    /// 要生成自动补全脚本的 Shell
     #[clap(value_enum, default_value_t = Shell::Bash)]
     shell: Shell,
 }
@@ -264,11 +265,11 @@ struct DebugAppServerSendMessageV2Command {
 
 #[derive(Debug, Parser)]
 struct DebugPromptInputCommand {
-    /// Optional user prompt to append after session context.
+    /// 恢复会话后追加的可选提示词。
     #[arg(value_name = "PROMPT")]
     prompt: Option<String>,
 
-    /// Optional image(s) to attach to the user prompt.
+    /// 附加到用户提示词的可选图片。
     #[arg(long = "image", short = 'i', value_name = "FILE", value_delimiter = ',', num_args = 1..)]
     images: Vec<PathBuf>,
 }
@@ -720,9 +721,9 @@ fn format_exit_messages(exit_info: AppExitInfo, color_enabled: bool) -> Vec<Stri
         } else {
             resume_cmd
         };
-        lines.push(format!("To continue this session, run {command}"));
+        lines.push(format!("要继续此会话，请运行 {command}"));
     } else if is_fatal && let Some(conversation_id) = conversation_id {
-        lines.push(format!("Session ID: {conversation_id}"));
+        lines.push(format!("会话 ID：{conversation_id}"));
     }
 
     lines
@@ -757,7 +758,7 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
 fn run_update_action(action: UpdateAction) -> anyhow::Result<()> {
     println!();
     let cmd_str = action.command_str();
-    println!("Updating Codex via `{cmd_str}`...");
+    println!("正在通过 `{cmd_str}` 更新 NaiCode...");
 
     let status = {
         #[cfg(windows)]
@@ -790,26 +791,22 @@ fn run_update_action(action: UpdateAction) -> anyhow::Result<()> {
         }
     };
     if !status.success() {
-        anyhow::bail!("`{cmd_str}` failed with status {status}");
+        anyhow::bail!("`{cmd_str}` 执行失败，状态：{status}");
     }
-    println!("\n🎉 Update ran successfully! Please restart Codex.");
+    println!("\n更新成功，请重新启动 NaiCode。");
     Ok(())
 }
 
 fn run_update_command() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     {
-        anyhow::bail!(
-            "`codex update` is not available in debug builds. Install a release build of Codex to use this command."
-        );
+        anyhow::bail!("调试版本不支持 `naicode update`，请安装 NaiCode 正式版本后使用此命令。");
     }
 
     #[cfg(not(debug_assertions))]
     {
         let Some(action) = codex_tui::get_update_action() else {
-            anyhow::bail!(
-                "Could not detect the Codex installation method. Please update manually: https://developers.openai.com/codex/cli/"
-            );
+            anyhow::bail!("无法识别 NaiCode 的安装方式，请手动更新 naicode npm 包。");
         };
         run_update_action(action)
     }
@@ -875,25 +872,24 @@ async fn run_debug_app_server_command(cmd: DebugAppServerCommand) -> anyhow::Res
 
 #[derive(Debug, Default, Parser, Clone)]
 struct FeatureToggles {
-    /// Enable a feature (repeatable). Equivalent to `-c features.<name>=true`.
+    /// 启用功能（可重复指定），等同于 `-c features.<name>=true`。
     #[arg(long = "enable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     enable: Vec<String>,
 
-    /// Disable a feature (repeatable). Equivalent to `-c features.<name>=false`.
+    /// 关闭功能（可重复指定），等同于 `-c features.<name>=false`。
     #[arg(long = "disable", value_name = "FEATURE", action = clap::ArgAction::Append, global = true)]
     disable: Vec<String>,
 }
 
 #[derive(Debug, Default, Parser, Clone)]
 struct InteractiveRemoteOptions {
-    /// Connect the TUI to a remote app server endpoint.
+    /// 将交互界面连接到远程应用服务器。
     ///
-    /// Accepted forms: `ws://host:port`, `wss://host:port`, `unix://`, or `unix://PATH`.
+    /// 支持：`ws://host:port`、`wss://host:port`、`unix://` 或 `unix://PATH`。
     #[arg(long = "remote", value_name = "ADDR")]
     remote: Option<String>,
 
-    /// Name of the environment variable containing the bearer token to send to
-    /// a remote app server websocket.
+    /// 保存远程应用服务器 WebSocket Bearer Token 的环境变量名。
     #[arg(long = "remote-auth-token-env", value_name = "ENV_VAR")]
     remote_auth_token_env: Option<String>,
 }
@@ -1670,7 +1666,7 @@ fn profile_v2_for_subcommand<'a>(
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
-            "--profile only applies to runtime commands and `codex mcp`: `codex`, `codex exec`, `codex review`, `codex resume`, `codex archive`, `codex delete`, `codex unarchive`, `codex fork`, `codex mcp`, `codex sandbox`, and `codex debug prompt-input`."
+            "--profile 仅适用于运行命令和 `naicode mcp`：`naicode`、`naicode exec`、`naicode review`、`naicode resume`、`naicode archive`、`naicode delete`、`naicode unarchive`、`naicode fork`、`naicode mcp`、`naicode sandbox` 和 `naicode debug prompt-input`。"
         ),
     }
 }
@@ -1684,7 +1680,7 @@ async fn run_exec_server_command(
     let codex_self_exe = arg0_paths
         .codex_self_exe
         .clone()
-        .ok_or_else(|| anyhow::anyhow!("Codex executable path is not configured"))?;
+        .ok_or_else(|| anyhow::anyhow!("尚未配置 NaiCode 可执行文件路径"))?;
     let runtime_paths = codex_exec_server::ExecServerRuntimePaths::new(
         codex_self_exe,
         arg0_paths.codex_linux_sandbox_exe.clone(),
@@ -2249,16 +2245,14 @@ async fn run_interactive_tui(
     if terminal_info.name == TerminalName::Dumb {
         if !(std::io::stdin().is_terminal() && std::io::stderr().is_terminal()) {
             return Ok(AppExitInfo::fatal(
-                "TERM is set to \"dumb\". Refusing to start the interactive TUI because no terminal is available for a confirmation prompt (stdin/stderr is not a TTY). Run in a supported terminal or unset TERM.",
+                "TERM 被设置为 \"dumb\"，并且当前没有可显示确认提示的终端（stdin/stderr 不是 TTY），因此无法启动交互界面。请使用受支持的终端，或取消设置 TERM。",
             ));
         }
 
-        eprintln!(
-            "WARNING: TERM is set to \"dumb\". Codex's interactive TUI may not work in this terminal."
-        );
-        if !confirm("Continue anyway? [y/N]: ")? {
+        eprintln!("警告：TERM 被设置为 \"dumb\"，NaiCode 交互界面可能无法在此终端正常工作。");
+        if !confirm("仍要继续吗？[y/N]：")? {
             return Ok(AppExitInfo::fatal(
-                "Refusing to start the interactive TUI because TERM is set to \"dumb\". Run in a supported terminal or unset TERM.",
+                "由于 TERM 被设置为 \"dumb\"，已停止启动交互界面。请使用受支持的终端，或取消设置 TERM。",
             ));
         }
     }
@@ -2306,7 +2300,7 @@ async fn run_interactive_tui(
             Err(backup_err) => {
                 local_state_db::print_diagnostic_guidance(startup_error);
                 return Ok(AppExitInfo::fatal(format!(
-                    "failed to move damaged Codex local database files into a backup folder automatically: {backup_err}"
+                    "无法将损坏的 NaiCode 本地数据库自动移动到备份目录：{backup_err}"
                 )));
             }
         }
@@ -3152,7 +3146,7 @@ mod tests {
         let lines = format_exit_messages(exit_info, /*color_enabled*/ false);
         assert_eq!(
             lines,
-            vec!["Session ID: 123e4567-e89b-12d3-a456-426614174000".to_string()]
+            vec!["会话 ID：123e4567-e89b-12d3-a456-426614174000".to_string()]
         );
     }
 
@@ -3167,8 +3161,8 @@ mod tests {
         assert_eq!(
             lines,
             vec![
-                "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run codex resume 123e4567-e89b-12d3-a456-426614174000"
+                "Token 用量：总计=2 输入=0 输出=2".to_string(),
+                "要继续此会话，请运行 naicode resume 123e4567-e89b-12d3-a456-426614174000"
                     .to_string(),
             ]
         );
@@ -3184,8 +3178,8 @@ mod tests {
         assert_eq!(
             lines,
             vec![
-                "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run codex resume 123e4567-e89b-12d3-a456-426614174000"
+                "Token 用量：总计=2 输入=0 输出=2".to_string(),
+                "要继续此会话，请运行 naicode resume 123e4567-e89b-12d3-a456-426614174000"
                     .to_string(),
             ]
         );
@@ -3212,8 +3206,8 @@ mod tests {
         assert_eq!(
             lines,
             vec![
-                "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run codex resume, then select my-thread (123e4567-e89b-12d3-a456-426614174000)".to_string(),
+                "Token 用量：总计=2 输入=0 输出=2".to_string(),
+                "要继续此会话，请运行 naicode resume，然后选择 my-thread (123e4567-e89b-12d3-a456-426614174000)".to_string(),
             ]
         );
     }

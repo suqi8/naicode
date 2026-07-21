@@ -54,17 +54,26 @@ pub const DEFAULT_MEMORIES_MAX_UNUSED_DAYS: i64 = 30;
 
 /// Relay model routing preferences. Optional fields preserve compatibility
 /// with existing config.toml files that predate Relay routing.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct RelayToml {
-    /// Automatically choose the lowest-ratio available group for the active model.
+    /// Legacy name retained for existing config.toml files.
     pub auto_select_lowest_ratio: Option<bool>,
+    /// Let the Relay choose the cheapest available group for the selected model.
+    pub auto_switch_enabled: Option<bool>,
+    /// Zero means that the lower bound is open.
+    pub min_group_ratio: Option<f64>,
+    /// Zero means that the upper bound is open.
+    pub max_group_ratio: Option<f64>,
 }
 
 impl Default for RelayToml {
     fn default() -> Self {
         Self {
             auto_select_lowest_ratio: Some(true),
+            auto_switch_enabled: Some(true),
+            min_group_ratio: Some(0.0),
+            max_group_ratio: Some(0.0),
         }
     }
 }

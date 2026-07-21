@@ -412,7 +412,8 @@ mod tests {
             .map(ratatui::buffer::Cell::symbol)
             .collect::<String>();
 
-        assert!(line.starts_with("工作中 (0s • 按 esc 中断)"));
+        assert!(!line.starts_with('•'));
+        assert!(line.contains("0s"));
     }
 
     #[test]

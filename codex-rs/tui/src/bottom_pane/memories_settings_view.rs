@@ -116,7 +116,7 @@ impl MemoriesSettingsView {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("记忆".bold()));
         header.push(Line::from(
-            "选择 Codex 如何使用和创建记忆。更改会保存到 config.toml".dim(),
+            "选择 NaiCode 如何使用和创建记忆。更改会保存到 config.toml".dim(),
         ));
         header
     }
@@ -125,7 +125,7 @@ impl MemoriesSettingsView {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("重置所有记忆？".bold()));
         header.push(Line::from(
-            "这将清除当前 Codex home 的本地记忆文件和 rollout 摘要。".dim(),
+            "这将清除当前 NaiCode 数据目录的本地记忆文件和 rollout 摘要。".dim(),
         ));
         header
     }

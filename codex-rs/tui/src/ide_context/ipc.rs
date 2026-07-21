@@ -27,7 +27,7 @@ const OPEN_IDE_HINT: &str =
 #[cfg(any(unix, windows))]
 const IDE_DID_NOT_PROVIDE_CONTEXT_HINT: &str = "The IDE extension did not provide context.";
 #[cfg(any(unix, windows))]
-const KEEP_TRYING_HINT: &str = "Codex will keep trying on future messages.";
+const KEEP_TRYING_HINT: &str = "NaiCode 会在后续消息中继续尝试。";
 
 #[derive(Debug, Error)]
 pub(crate) enum IdeContextError {
@@ -69,10 +69,10 @@ impl IdeContextError {
                 "The selected IDE context is too large. Clear any large selection in your IDE and try /ide again.".to_string()
             }
             IdeContextError::Send(_) => {
-                "Codex could not request IDE context. Try /ide again.".to_string()
+                "NaiCode 无法请求 IDE 上下文，请再次运行 /ide。".to_string()
             }
             IdeContextError::Read(_) | IdeContextError::InvalidResponse(_) => {
-                "Codex could not read IDE context. Try /ide again.".to_string()
+                "NaiCode 无法读取 IDE 上下文，请再次运行 /ide。".to_string()
             }
         }
     }
@@ -89,11 +89,10 @@ impl IdeContextError {
                 OPEN_IDE_HINT.to_string()
             }
             IdeContextError::Read(error) if error.kind() == std::io::ErrorKind::TimedOut => {
-                "Codex timed out waiting for IDE context. It will keep trying on future messages."
-                    .to_string()
+                "等待 IDE 上下文超时，NaiCode 会在后续消息中继续尝试。".to_string()
             }
             IdeContextError::RequestFailed(error) if error == "client-disconnected" => {
-                hint_with_retry("The IDE connection changed while Codex was requesting context.")
+                hint_with_retry("NaiCode 请求上下文时 IDE 连接发生了变化。")
             }
             IdeContextError::RequestFailed(error) if error == "request-timeout" => {
                 hint_with_retry("The IDE extension did not answer in time.")
@@ -105,14 +104,12 @@ impl IdeContextError {
             IdeContextError::RequestFailed(error) if error == "no-handler-for-request" => {
                 "The connected IDE client does not support IDE context requests.".to_string()
             }
-            IdeContextError::Send(_) => {
-                hint_with_retry("Codex lost the IDE connection while requesting context.")
-            }
+            IdeContextError::Send(_) => hint_with_retry("NaiCode 请求上下文时失去了 IDE 连接。"),
             IdeContextError::InvalidResponse(_) => {
-                hint_with_retry("Codex received an unexpected IDE context response.")
+                hint_with_retry("NaiCode 收到了异常的 IDE 上下文响应。")
             }
             IdeContextError::RequestFailed(_) => hint_with_retry(IDE_DID_NOT_PROVIDE_CONTEXT_HINT),
-            IdeContextError::Read(_) => hint_with_retry("Codex could not read IDE context."),
+            IdeContextError::Read(_) => hint_with_retry("NaiCode 无法读取 IDE 上下文。"),
         }
     }
 

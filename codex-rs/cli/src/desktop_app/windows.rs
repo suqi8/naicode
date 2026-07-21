@@ -14,19 +14,19 @@ pub async fn run_windows_app_open_or_install(
     let workspace_path = workspace.display().to_string();
     let display_workspace = display_workspace_path(&workspace);
     if codex_app_is_installed().await? {
-        eprintln!("Opening Codex Desktop workspace {display_workspace}...");
+        eprintln!("正在使用 NaiCode Desktop 打开工作区 {display_workspace}...");
         open_url(&codex_new_thread_url(&workspace_path)).await?;
         return Ok(());
     }
 
-    eprintln!("Codex Desktop not found; opening Windows installer...");
+    eprintln!("未找到 NaiCode Desktop，正在打开 Windows 安装程序...");
     let download_url = download_url_override
         .as_deref()
         .unwrap_or(CODEX_WINDOWS_INSTALLER_URL);
     if open_url(download_url).await.is_err() && download_url_override.is_none() {
         open_url(CODEX_MICROSOFT_STORE_WEB_URL).await?;
     }
-    eprintln!("After installing Codex Desktop, open workspace {display_workspace}.");
+    eprintln!("安装 NaiCode Desktop 后，请打开工作区 {display_workspace}。");
     Ok(())
 }
 
@@ -37,7 +37,7 @@ async fn codex_app_is_installed() -> anyhow::Result<bool> {
         .arg("Get-StartApps -Name 'Codex' | Select-Object -First 1 -ExpandProperty AppID")
         .output()
         .await
-        .context("failed to invoke `powershell.exe`")?;
+        .context("调用 `powershell.exe` 失败")?;
 
     if !output.status.success() {
         return Ok(false);
@@ -54,12 +54,12 @@ async fn open_url(url: &str) -> anyhow::Result<()> {
         .arg(url)
         .status()
         .await
-        .with_context(|| format!("failed to open {url}"))?;
+        .with_context(|| format!("打开 {url} 失败"))?;
 
     if status.success() {
         Ok(())
     } else {
-        anyhow::bail!("failed to open {url} with {status}");
+        anyhow::bail!("打开 {url} 失败，状态：{status}");
     }
 }
 

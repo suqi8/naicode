@@ -30,9 +30,9 @@ fn format_exit_messages(exit_info: AppExitInfo, color_enabled: bool) -> Vec<Stri
         } else {
             resume_cmd
         };
-        lines.push(format!("To continue this session, run {command}"));
+        lines.push(format!("要继续此会话，请运行 {command}"));
     } else if is_fatal && let Some(thread_id) = thread_id {
-        lines.push(format!("Session ID: {thread_id}"));
+        lines.push(format!("会话 ID：{thread_id}"));
     }
 
     lines

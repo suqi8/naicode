@@ -1,16 +1,15 @@
 ---
 source: tui/src/bottom_pane/mod.rs
-assertion_line: 1826
 expression: "render_snapshot(&pane, area)"
 ---
-• Working (0s • esc to interrupt)               
+• 工 作 中  (0s • 按  esc 中 断 )                     
   └ First detail line                           
     Second detail line                          
                                                 
-• Queued follow-up inputs                       
+• 排 队 的 后 续 输 入                                 
   ↳ Queued follow-up question                   
-    ⌥ + ↑ edit last queued message              
+    ⌥ + ↑ 编 辑 最 后 一 条 排 队 消 息                   
                                                 
 › Ask Codex to do anything                      
                                                 
-  ? for shortcuts            100% context left
+  ? 查 看 快 捷 键                  剩 余 上 下 文  100%

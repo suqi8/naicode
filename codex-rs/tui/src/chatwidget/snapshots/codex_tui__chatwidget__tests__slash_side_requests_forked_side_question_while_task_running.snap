@@ -3,9 +3,9 @@ source: tui/src/chatwidget/tests/side.rs
 expression: normalized_backend_snapshot(terminal.backend())
 ---
 "                                                                                "
-"• Working (0s • esc to interrupt)                                               "
+"• 工作中 (0s • 按 esc 中断)                                                     " Hidden by multi-width symbols: [(3, " "), (5, " "), (7, " "), (16, " "), (23, " "), (25, " ")]
 "                                                                                "
 "                                                                                "
 "› Ask Codex to do anything                                                      "
 "                                                                                "
-"  gpt-5.6-sol default                                         Side starting...  "
+"  gpt-5.6-sol 默认                                           侧边对话启动中...  " Hidden by multi-width symbols: [(15, " "), (17, " "), (62, " "), (64, " "), (66, " "), (68, " "), (70, " "), (72, " "), (74, " ")]

@@ -642,7 +642,10 @@ impl App {
                 //       codex_home, group)，待该函数对外公开后替换。目前使用
                 //       relay_switch_group 以保证 relay.json 同步写入。
                 tokio::runtime::Handle::current().spawn(async move {
-                    let result = codex_login::relay_switch_group(&codex_home, &group).await;
+                    let result = match group.as_deref() {
+                        Some(group) => codex_login::relay_switch_group(&codex_home, group).await,
+                        None => Ok(()),
+                    };
                     match result {
                         Ok(()) => {
                             tx.send(AppEvent::UpdateModel(model.clone()));
@@ -679,7 +682,14 @@ impl App {
                     .map(crate::chatwidget::ChatWidget::reasoning_effort_label)
                     .unwrap_or_else(|| "默认".to_string());
                 self.chat_widget.add_info_message(
-                    format!("已切换到分组「{group}」模型「{model}」· 思考等级「{effort}」"),
+                    match group {
+                        Some(group) => format!(
+                            "已切换到手动分组「{group}」模型「{model}」· 思考等级「{effort}」"
+                        ),
+                        None => format!(
+                            "已选择模型「{model}」· 自动使用倍率范围内最低可用分组 · 思考等级「{effort}」"
+                        ),
+                    },
                     /*hint*/ None,
                 );
             }
@@ -714,6 +724,32 @@ impl App {
                     .map(Box::new);
                     tx.send(AppEvent::OpenRelayGroups { result });
                 });
+            }
+            AppEvent::OpenRelayModelPicker => {
+                self.chat_widget.open_relay_group_popup();
+            }
+            AppEvent::OpenThemeSettings => {
+                self.chat_widget.open_theme_picker();
+            }
+            AppEvent::OpenKeymapSettings => {
+                self.chat_widget.open_keymap_picker();
+            }
+            AppEvent::OpenExperimentalSettings => {
+                self.chat_widget.open_experimental_popup();
+            }
+            AppEvent::OpenMemoriesSettings => {
+                self.chat_widget.open_memories_popup();
+            }
+            AppEvent::OpenMcpSettings => {
+                self.chat_widget.add_mcp_output(
+                    codex_app_server_protocol::McpServerStatusDetail::ToolsAndAuthOnly,
+                );
+            }
+            AppEvent::OpenAppsSettings => {
+                self.chat_widget.add_connectors_output();
+            }
+            AppEvent::OpenPluginsSettings => {
+                self.chat_widget.add_plugins_output();
             }
             AppEvent::PluginRemoteSectionsLoaded {
                 cwd,
@@ -1614,7 +1650,7 @@ impl App {
                                     Line::from(vec!["• ".dim(), "沙箱已就绪".into()]),
                                     Line::from(vec![
                                         "  ".into(),
-                                        "Codex 现在可以安全地在你的电脑上编辑文件并执行命令"
+                                        "NaiCode 现在可以安全地在你的电脑上编辑文件并执行命令"
                                             .dark_gray(),
                                     ]),
                                 ]);
@@ -1647,7 +1683,7 @@ impl App {
                                     Line::from(vec!["• ".dim(), "沙箱已就绪".into()]),
                                     Line::from(vec![
                                         "  ".into(),
-                                        "Codex 现在可以安全地在你的电脑上编辑文件并执行命令"
+                                        "NaiCode 现在可以安全地在你的电脑上编辑文件并执行命令"
                                             .dark_gray(),
                                     ]),
                                 ]);
@@ -1783,22 +1819,56 @@ impl App {
                     }
                 }
             }
-            AppEvent::PersistRelayAutoSelection { enabled } => {
-                let edit = crate::config_update::replace_config_value(
-                    "relay.auto_select_lowest_ratio",
-                    serde_json::json!(enabled),
-                );
-                match crate::config_update::write_config_batch(
-                    app_server.request_handle(),
-                    vec![edit],
-                )
-                .await
+            AppEvent::PersistRelayRouting {
+                enabled,
+                min_ratio,
+                max_ratio,
+            } => {
+                let codex_home = self.chat_widget.config_ref().codex_home.clone();
+                let remote =
+                    codex_login::relay_update_routing(&codex_home, enabled, min_ratio, max_ratio)
+                        .await;
+                if let Err(err) = remote {
+                    self.chat_widget
+                        .add_error_message(format!("同步自动分组设置失败：{err}"));
+                    return Ok(AppRunControl::Continue);
+                }
+                let edits = vec![
+                    crate::config_update::replace_config_value(
+                        "relay.auto_switch_enabled",
+                        serde_json::json!(enabled),
+                    ),
+                    crate::config_update::replace_config_value(
+                        "relay.auto_select_lowest_ratio",
+                        serde_json::json!(enabled),
+                    ),
+                    crate::config_update::replace_config_value(
+                        "relay.min_group_ratio",
+                        serde_json::json!(min_ratio),
+                    ),
+                    crate::config_update::replace_config_value(
+                        "relay.max_group_ratio",
+                        serde_json::json!(max_ratio),
+                    ),
+                ];
+                match crate::config_update::write_config_batch(app_server.request_handle(), edits)
+                    .await
                 {
                     Ok(_) => {
                         self.chat_widget.add_info_message(
                             format!(
-                                "Relay 自动最低倍率模式已{}",
-                                if enabled { "开启" } else { "关闭" }
+                                "自动选择分组已{}（倍率 {}–{}）",
+                                if enabled { "开启" } else { "关闭" },
+                                if min_ratio > 0.0 {
+                                    min_ratio.to_string()
+                                } else {
+                                    "不限".to_string()
+                                },
+                                if max_ratio > 0.0 {
+                                    max_ratio.to_string()
+                                } else {
+                                    "不限".to_string()
+                                },
                             ),
                             /*hint*/ None,
                         );
@@ -1809,6 +1879,14 @@ impl App {
                             .add_error_message(format!("保存 Relay 自动模式失败：{err}"));
                     }
                 }
+            }
+            AppEvent::OpenRelayRatioPrompt {
+                edit_minimum,
+                current,
+                other,
+            } => {
+                self.chat_widget
+                    .open_relay_ratio_prompt(edit_minimum, current, other);
             }
             AppEvent::UpdateAskForApprovalPolicy(policy) => {
                 let mut config = self.config.clone();

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Unified entry point for the Codex CLI.
+// Unified entry point for the NaiCode CLI.
 
 import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "fs";
@@ -76,7 +76,7 @@ if (!platformPackage) {
   throw new Error(`Unsupported target triple: ${targetTriple}`);
 }
 
-function findCodexExecutable() {
+function findNaiCodeExecutable() {
   let vendorRoot;
   try {
     const packageJsonPath = require.resolve(`${platformPackage}/package.json`);
@@ -85,14 +85,16 @@ function findCodexExecutable() {
     vendorRoot = path.join(__dirname, "..", "vendor");
   }
 
-  const codexExecutable = path.join(
-    vendorRoot,
-    targetTriple,
-    "bin",
-    process.platform === "win32" ? "codex.exe" : "codex",
-  );
-  if (existsSync(codexExecutable)) {
-    return codexExecutable;
+  const binDir = path.join(vendorRoot, targetTriple, "bin");
+  const executableNames =
+    process.platform === "win32"
+      ? ["naicode.exe", "codex.exe"]
+      : ["naicode", "codex"];
+  for (const executableName of executableNames) {
+    const executable = path.join(binDir, executableName);
+    if (existsSync(executable)) {
+      return executable;
+    }
   }
 
   const packageManager = detectPackageManager();
@@ -107,7 +109,7 @@ function findCodexExecutable() {
   );
 }
 
-const binaryPath = findCodexExecutable();
+const binaryPath = findNaiCodeExecutable();
 
 // Use an asynchronous spawn instead of spawnSync so that Node is able to
 // respond to signals (e.g. Ctrl-C / SIGINT) while the native binary is

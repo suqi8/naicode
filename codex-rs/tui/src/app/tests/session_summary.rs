@@ -54,11 +54,11 @@ async fn session_summary_includes_resume_hint_for_persisted_rollout() {
     .expect("summary");
     assert_eq!(
         summary.usage_line,
-        Some("Token usage: total=12 input=10 output=2".to_string())
+        Some("Token 用量：总计=12 输入=10 输出=2".to_string())
     );
     assert_eq!(
         summary.resume_hint,
-        Some("codex resume 123e4567-e89b-12d3-a456-426614174000".to_string())
+        Some("naicode resume 123e4567-e89b-12d3-a456-426614174000".to_string())
     );
 }
 
@@ -85,7 +85,7 @@ async fn session_summary_names_picker_item_when_thread_has_name() {
     assert_eq!(
         summary.resume_hint,
         Some(
-            "codex resume, then select my-session (123e4567-e89b-12d3-a456-426614174000)"
+            "naicode resume，然后选择 my-session (123e4567-e89b-12d3-a456-426614174000)"
                 .to_string()
         )
     );

@@ -116,7 +116,7 @@ impl SlashCommand {
             SlashCommand::MemoryDrop => "请勿使用",
             SlashCommand::MemoryUpdate => "请勿使用",
             SlashCommand::Model => {
-                "选择模型：先选酸奶中转站分组，再选该分组内的模型（含倍率与价格）"
+                "选择模型；自动模式按倍率范围使用最低可用分组，手动模式可指定分组"
             }
             SlashCommand::Config => "打开配置设置并切换 Relay 自动最低倍率模式",
             SlashCommand::Ide => "包含当前选中内容、已打开的文件以及来自 IDE 的其他上下文",

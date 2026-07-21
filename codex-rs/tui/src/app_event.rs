@@ -491,14 +491,14 @@ pub(crate) enum AppEvent {
 
     /// naicode: 为 Relay 模型选择其支持的思考等级。
     OpenRelayReasoningPopup {
-        group: String,
+        group: Option<String>,
         model: String,
     },
 
     /// naicode: 待应用的 Relay 模型切换选择，包含分组、模型和思考等级。
     /// 仅在用户确认后由 apply_relay_selection 状态机消费。
     PendingRelayModelSelection {
-        group: String,
+        group: Option<String>,
         model: String,
         effort: Option<ReasoningEffort>,
     },
@@ -515,7 +515,7 @@ pub(crate) enum AppEvent {
 
     /// naicode: Relay 模型切换成功，所有步骤已一致完成。
     RelaySelectionApplied {
-        group: String,
+        group: Option<String>,
         model: String,
         effort: Option<ReasoningEffort>,
     },
@@ -535,6 +535,17 @@ pub(crate) enum AppEvent {
 
     /// naicode: 开始通过 AuthManager 获取授权价格目录（替代匿名 fetch_pricing）。
     FetchRelayCatalogWithAuth,
+
+    /// Open the Relay model picker from the settings menu.
+    OpenRelayModelPicker,
+
+    OpenThemeSettings,
+    OpenKeymapSettings,
+    OpenExperimentalSettings,
+    OpenMemoriesSettings,
+    OpenMcpSettings,
+    OpenAppsSettings,
+    OpenPluginsSettings,
 
     /// Result of explicitly fetching remote-backed plugin sections.
     PluginRemoteSectionsLoaded {
@@ -806,9 +817,18 @@ pub(crate) enum AppEvent {
         service_tier: Option<String>,
     },
 
-    /// Persist the Relay automatic lowest-ratio routing preference.
-    PersistRelayAutoSelection {
+    /// Persist and synchronize OAuth automatic group routing preferences.
+    PersistRelayRouting {
         enabled: bool,
+        min_ratio: f64,
+        max_ratio: f64,
+    },
+
+    /// Open a numeric editor for either Relay group-ratio bound.
+    OpenRelayRatioPrompt {
+        edit_minimum: bool,
+        current: f64,
+        other: f64,
     },
 
     /// Open the reasoning selection popup after picking a model.
@@ -1184,7 +1204,7 @@ pub(crate) enum FeedbackCategory {
 /// naicode: 待应用的 Relay 模型选择快照，在整个事务期间保持不变。
 #[derive(Debug, Clone)]
 pub(crate) struct RelaySelectionPending {
-    pub group: String,
+    pub group: Option<String>,
     pub model: String,
     pub effort: Option<ReasoningEffort>,
 }

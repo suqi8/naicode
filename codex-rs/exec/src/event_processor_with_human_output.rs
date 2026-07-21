@@ -99,7 +99,7 @@ impl EventProcessorWithHumanOutput {
             ThreadItem::AgentMessage { text, .. } => {
                 eprintln!(
                     "{}\n{}",
-                    "codex".style(self.italic).style(self.magenta),
+                    "NaiCode".style(self.italic).style(self.magenta),
                     text
                 );
                 self.final_message = Some(text);
@@ -215,12 +215,12 @@ impl EventProcessor for EventProcessorWithHumanOutput {
         session_configured_event: &SessionConfiguredEvent,
     ) {
         const VERSION: &str = env!("CARGO_PKG_VERSION");
-        eprintln!("OpenAI Codex v{VERSION}\n--------");
+        eprintln!("NaiCode v{VERSION}\n--------");
         for (key, value) in config_summary_entries(config, session_configured_event) {
             eprintln!("{} {}", format!("{key}:").style(self.bold), value);
         }
         eprintln!("--------");
-        eprintln!("{}\n{}", "user".style(self.cyan), prompt);
+        eprintln!("{}\n{}", "用户".style(self.cyan), prompt);
     }
 
     fn process_server_notification(&mut self, notification: ServerNotification) -> CodexStatus {
@@ -383,7 +383,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
         if let Some(usage) = &self.last_total_token_usage {
             eprintln!(
                 "{}\n{}",
-                "tokens used".style(self.dimmed),
+                "已用 Token".style(self.dimmed),
                 format_with_separators(blended_total(usage))
             );
         }
@@ -409,7 +409,7 @@ impl EventProcessor for EventProcessorWithHumanOutput {
         {
             eprintln!(
                 "{}\n{}",
-                "codex".style(self.italic).style(self.magenta),
+                "NaiCode".style(self.italic).style(self.magenta),
                 message
             );
         }
@@ -422,18 +422,15 @@ fn config_summary_entries(
 ) -> Vec<(&'static str, String)> {
     let permission_profile = config.permissions.effective_permission_profile();
     let mut entries = vec![
-        ("workdir", config.cwd.display().to_string()),
-        ("model", session_configured_event.model.clone()),
+        ("工作目录", config.cwd.display().to_string()),
+        ("模型", session_configured_event.model.clone()),
+        ("服务商", session_configured_event.model_provider_id.clone()),
         (
-            "provider",
-            session_configured_event.model_provider_id.clone(),
-        ),
-        (
-            "approval",
+            "审批模式",
             config.permissions.approval_policy.value().to_string(),
         ),
         (
-            "sandbox",
+            "沙箱",
             summarize_permission_profile(
                 &permission_profile,
                 &config.cwd,
@@ -443,7 +440,7 @@ fn config_summary_entries(
     ];
     if config.model_provider.wire_api == WireApi::Responses {
         entries.push((
-            "reasoning effort",
+            "思考等级",
             config
                 .model_reasoning_effort
                 .as_ref()
@@ -451,17 +448,14 @@ fn config_summary_entries(
                 .unwrap_or_else(|| "none".to_string()),
         ));
         entries.push((
-            "reasoning summaries",
+            "思考摘要",
             config
                 .model_reasoning_summary
                 .map(|summary| summary.to_string())
                 .unwrap_or_else(|| "none".to_string()),
         ));
     }
-    entries.push((
-        "session id",
-        session_configured_event.session_id.to_string(),
-    ));
+    entries.push(("会话 ID", session_configured_event.session_id.to_string()));
     entries
 }
 

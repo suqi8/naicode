@@ -1067,12 +1067,16 @@ impl BottomPane {
     pub(crate) fn show_relay_picker(
         &mut self,
         app_event_tx: AppEventSender,
-        initial_key: Option<String>,
+        auto_routing: bool,
+        min_group_ratio: f64,
+        max_group_ratio: f64,
     ) {
-        let picker = relay_model_picker::RelayModelPicker::new_with_initial_key(
+        let picker = relay_model_picker::RelayModelPicker::new_with_routing(
             relay_model_picker::RelayPickerState::Loading,
             app_event_tx,
-            initial_key,
+            auto_routing,
+            min_group_ratio,
+            max_group_ratio,
         );
         self.push_view(Box::new(picker));
     }
@@ -2099,7 +2103,7 @@ mod tests {
             r0.push(buf[(x, 0)].symbol().chars().next().unwrap_or(' '));
         }
         assert!(
-            !r0.contains("Working"),
+            !r0.contains("工作中"),
             "overlay should not render above modal"
         );
     }
@@ -2366,8 +2370,8 @@ mod tests {
             row0.push(buf[(x, 0)].symbol().chars().next().unwrap_or(' '));
         }
         assert!(
-            row0.contains("Working"),
-            "expected Working header after denial on row 0: {row0:?}"
+            row0.contains("工作中"),
+            "expected 工作中 header after denial on row 0: {row0:?}"
         );
 
         // Composer placeholder should be visible somewhere below.
@@ -2412,7 +2416,7 @@ mod tests {
         pane.render(area, &mut buf);
 
         let bufs = snapshot_buffer(&buf);
-        assert!(bufs.contains("• Working"), "expected Working header");
+        assert!(bufs.contains("• 工作中"), "expected 工作中 header");
     }
 
     #[test]
@@ -2515,7 +2519,7 @@ mod tests {
 
         pane.set_task_running(/*running*/ true);
         pane.update_status(
-            "Working".to_string(),
+            "工作中".to_string(),
             Some("First detail line\nSecond detail line".to_string()),
             StatusDetailsCapitalization::CapitalizeFirst,
             STATUS_DETAILS_DEFAULT_MAX_LINES,

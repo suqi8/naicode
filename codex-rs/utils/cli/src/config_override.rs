@@ -17,12 +17,11 @@ use toml::Value;
 /// calling code can decide how to interpret the right-hand side.
 #[derive(Parser, Debug, Default, Clone)]
 pub struct CliConfigOverrides {
-    /// Override a configuration value that would otherwise be loaded from
-    /// `~/.codex/config.toml`. Use a dotted path (`foo.bar.baz`) to override
-    /// nested values. The `value` portion is parsed as TOML. If it fails to
-    /// parse as TOML, the raw string is used as a literal.
+    /// 覆盖原本从 `~/.codex/config.toml` 加载的配置。可使用点分路径
+    ///（如 `foo.bar.baz`）覆盖嵌套值。值会先按 TOML 解析；解析失败时
+    /// 将原始内容作为字符串使用。
     ///
-    /// Examples:
+    /// 示例：
     ///   - `-c model="o3"`
     ///   - `-c 'sandbox_permissions=["disk-full-read-access"]'`
     ///   - `-c shell_environment_policy.inherit=all`

@@ -3,7 +3,7 @@ source: tui/src/chatwidget/tests/status_and_layout.rs
 expression: snapshot
 ---
 "                                                                                "
-"• Working (0s • esc to interrupt)                                               "
+"• 工作中 (0s • 按 esc 中断)                                               "
 "                                                                                "
 "                                                                                "
 "› Ask Codex to do anything                                                      "

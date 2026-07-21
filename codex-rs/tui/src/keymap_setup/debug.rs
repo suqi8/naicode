@@ -22,8 +22,8 @@ use super::actions::matching_actions_for_key_event;
 use super::key_event_to_config_key_spec;
 
 const MISSING_KEY_HINT_DELAY: Duration = Duration::from_secs(3);
-const SHORT_MISSING_KEY_HINT: &str = "Tip: Codex can only inspect keys your terminal sends.";
-const DELAYED_MISSING_KEY_HINT: &str = "Still waiting? If nothing changes when you press a key, your terminal is not sending that key to Codex. Only received keys can be assigned as shortcuts.";
+const SHORT_MISSING_KEY_HINT: &str = "提示：NaiCode 只能检测终端实际发送的按键。";
+const DELAYED_MISSING_KEY_HINT: &str = "仍在等待？如果按键后没有变化，说明终端没有向 NaiCode 发送该按键；只有收到的按键才能设为快捷键。";
 
 struct KeymapDebugReport {
     detected: KeyBinding,
@@ -63,9 +63,7 @@ impl KeymapDebugView {
         let wrap_width = usize::from(width.max(1));
         let mut lines = vec![
             Line::from("Keypress Inspector".bold()),
-            Line::from(
-                "Press any key to see what Codex receives. Esc is inspected; Ctrl+C closes.".dim(),
-            ),
+            Line::from("按任意键查看 NaiCode 收到的内容；Esc 也会检测，Ctrl+C 关闭。".dim()),
         ];
         let hint = if self.should_show_delayed_hint(now) {
             DELAYED_MISSING_KEY_HINT

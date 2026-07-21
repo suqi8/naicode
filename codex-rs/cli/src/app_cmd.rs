@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 pub struct AppCommand {
-    /// Workspace path to open in Codex Desktop.
+    /// 要在 NaiCode Desktop 中打开的工作区路径。
     #[arg(value_name = "PATH", default_value = ".")]
     pub path: PathBuf,
 

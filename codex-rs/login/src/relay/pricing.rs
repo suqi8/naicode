@@ -130,6 +130,10 @@ pub struct PricingModel {
     #[serde(default)]
     pub model_name: String,
     #[serde(default)]
+    pub vendor_id: i64,
+    #[serde(default)]
+    pub vendor_name: String,
+    #[serde(default)]
     pub model_ratio: f64,
     #[serde(default)]
     pub completion_ratio: f64,
@@ -298,11 +302,127 @@ impl RelayPricing {
         entries
     }
 
+    pub fn picker_model_types(&self) -> Vec<GroupInfo> {
+        let has_marketplace_vendors = self
+            .models
+            .iter()
+            .any(|model| model.vendor_id != 0 || !model.vendor_name.trim().is_empty());
+        if !has_marketplace_vendors {
+            let mut entries = vec![GroupInfo {
+                key: "type:all".to_string(),
+                name: "全部".to_string(),
+                desc: "显示全部可用模型".to_string(),
+                ratio: None,
+                ratio_conflict: false,
+            }];
+            let mut families = self
+                .models
+                .iter()
+                .map(|model| model_family(&model.model_name))
+                .collect::<Vec<_>>();
+            families.sort_unstable();
+            families.dedup();
+            entries.extend(families.into_iter().map(|family| GroupInfo {
+                key: format!("type:{family}"),
+                name: family.to_string(),
+                desc: "按模型类型筛选".to_string(),
+                ratio: None,
+                ratio_conflict: false,
+            }));
+            return entries;
+        }
+
+        let mut entries = vec![GroupInfo {
+            key: "vendor:all".to_string(),
+            name: "全部".to_string(),
+            desc: "显示全部可用模型".to_string(),
+            ratio: None,
+            ratio_conflict: false,
+        }];
+        let mut vendors = self
+            .models
+            .iter()
+            .map(|model| {
+                let name = if model.vendor_name.trim().is_empty() {
+                    "其他".to_string()
+                } else {
+                    model.vendor_name.trim().to_string()
+                };
+                (model.vendor_id, name)
+            })
+            .collect::<Vec<_>>();
+        vendors.sort_by(|(a_id, a_name), (b_id, b_name)| {
+            a_name.cmp(b_name).then_with(|| a_id.cmp(b_id))
+        });
+        vendors.dedup_by_key(|(id, _)| *id);
+        entries.extend(
+            vendors
+                .into_iter()
+                .map(|(vendor_id, vendor_name)| GroupInfo {
+                    key: format!("vendor:{vendor_id}"),
+                    name: vendor_name,
+                    desc: "与模型广场供应商分类同步".to_string(),
+                    ratio: None,
+                    ratio_conflict: false,
+                }),
+        );
+        entries
+    }
+
+    /// Models available to OAuth automatic routing. The returned group is
+    /// only a catalog preview; the Relay independently selects an available
+    /// group for every request using the same ratio bounds.
+    pub fn auto_routed_models<'a>(
+        &'a self,
+        type_key: &str,
+        min_ratio: f64,
+        max_ratio: f64,
+    ) -> Vec<PricingModelChoice<'a>> {
+        let mut choices = self
+            .models
+            .iter()
+            .filter(|model| model_matches_picker_category(model, type_key))
+            .filter_map(|model| {
+                let group = model
+                    .enable_groups
+                    .iter()
+                    .filter_map(|group| {
+                        let ratio = self
+                            .group_ratio
+                            .get(group)
+                            .or_else(|| {
+                                model
+                                    .effective_prices
+                                    .get(group)
+                                    .and_then(|price| price.group_ratio.as_ref())
+                            })
+                            .map(GroupRatio::numeric)?;
+                        if (min_ratio > 0.0 && ratio < min_ratio)
+                            || (max_ratio > 0.0 && ratio > max_ratio)
+                        {
+                            return None;
+                        }
+                        Some((group, ratio))
+                    })
+                    .min_by(|(a_group, a_ratio), (b_group, b_ratio)| {
+                        a_ratio
+                            .partial_cmp(b_ratio)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                            .then_with(|| a_group.cmp(b_group))
+                    })
+                    .map(|(group, _)| group.clone())?;
+                Some(PricingModelChoice { model, group })
+            })
+            .collect::<Vec<_>>();
+        choices.sort_by(|a, b| a.model.model_name.cmp(&b.model.model_name));
+        choices
+    }
+
     /// Returns models and the real group that should be used for each model
     /// under a picker entry.
     pub fn picker_models<'a>(&'a self, key: &str) -> Vec<PricingModelChoice<'a>> {
-        let (family, policy) = if let Some(family) = key.strip_prefix("type:") {
-            (Some(family), PICKER_POLICY_LOWEST_PRICE)
+        let (category, policy) = if key.starts_with("type:") || key.starts_with("vendor:") {
+            (Some(key), PICKER_POLICY_LOWEST_PRICE)
         } else {
             (None, key)
         };
@@ -313,7 +433,7 @@ impl RelayPricing {
         let mut choices = self
             .models
             .iter()
-            .filter(|model| family.is_none_or(|family| model_family(&model.model_name) == family))
+            .filter(|model| category.is_none_or(|key| model_matches_picker_category(model, key)))
             .filter_map(|model| {
                 let group = explicit_group
                     .map(str::to_string)
@@ -412,6 +532,16 @@ pub fn model_family(model_name: &str) -> &'static str {
     } else {
         "Other"
     }
+}
+
+fn model_matches_picker_category(model: &PricingModel, key: &str) -> bool {
+    if let Some(vendor) = key.strip_prefix("vendor:") {
+        return vendor == "all" || vendor.parse::<i64>().ok() == Some(model.vendor_id);
+    }
+    let Some(family) = key.strip_prefix("type:") else {
+        return true;
+    };
+    family == "all" || model_family(&model.model_name) == family
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -562,7 +692,8 @@ mod tests {
             "group_ratio": {"vip": 0.5},
             "usable_group": {"vip": "会员"},
             "data": [{
-                "model_name": "gpt-test", "enable_groups": ["vip"],
+                "model_name": "gpt-test", "vendor_id": 7, "vendor_name": "OpenAI",
+                "enable_groups": ["vip"],
                 "billing_mode": "ratio", "pricing_version": "model-v3",
                 "effective_prices": {"vip": {
                     "group_ratio": 0.5, "basis": "per_million_tokens",
@@ -578,6 +709,8 @@ mod tests {
         assert_eq!(catalog.selected_group.as_deref(), Some("vip"));
         assert_eq!(catalog.version.as_deref(), Some("catalog-v2"));
         assert_eq!(catalog.display.currency_symbol, "¥");
+        assert_eq!(catalog.models[0].vendor_id, 7);
+        assert_eq!(catalog.models[0].vendor_name, "OpenAI");
         let price = catalog.effective_price(&catalog.models[0], "vip").unwrap();
         assert_eq!(price.cache_create_1h, Some(0.4));
         assert_eq!(price.audio_output, Some(0.08));
@@ -700,5 +833,77 @@ mod tests {
                 .iter()
                 .any(|group| group.key == "group:cheap")
         );
+    }
+
+    #[test]
+    fn automatic_routing_filters_group_ratio_range_and_model_type() {
+        let model = |name: &str, vendor_id: i64, vendor_name: &str| PricingModel {
+            model_name: name.to_string(),
+            vendor_id,
+            vendor_name: vendor_name.to_string(),
+            enable_groups: vec![
+                "too-cheap".to_string(),
+                "eligible-low".to_string(),
+                "eligible-high".to_string(),
+            ],
+            effective_prices: HashMap::from([
+                ("too-cheap".to_string(), EffectivePrice::default()),
+                ("eligible-low".to_string(), EffectivePrice::default()),
+                ("eligible-high".to_string(), EffectivePrice::default()),
+            ]),
+            ..Default::default()
+        };
+        let pricing = RelayPricing {
+            group_ratio: HashMap::from([
+                ("too-cheap".to_string(), GroupRatio::from(0.05)),
+                ("eligible-low".to_string(), GroupRatio::from(0.1)),
+                ("eligible-high".to_string(), GroupRatio::from(0.15)),
+            ]),
+            models: vec![
+                model("gpt-test", 1, "OpenAI"),
+                model("claude-test", 2, "Anthropic"),
+            ],
+            ..Default::default()
+        };
+
+        let all = pricing.auto_routed_models("vendor:all", 0.1, 0.15);
+        assert_eq!(all.len(), 2);
+        assert!(all.iter().all(|choice| choice.group == "eligible-low"));
+
+        let openai = pricing.auto_routed_models("vendor:1", 0.1, 0.15);
+        assert_eq!(openai.len(), 1);
+        assert_eq!(openai[0].model.model_name, "gpt-test");
+
+        assert!(
+            pricing
+                .auto_routed_models("vendor:all", 0.2, 0.3)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn picker_categories_follow_model_plaza_vendors() {
+        let pricing = RelayPricing {
+            models: vec![
+                PricingModel {
+                    model_name: "custom-a".to_string(),
+                    vendor_id: 42,
+                    vendor_name: "站点自定义供应商".to_string(),
+                    ..Default::default()
+                },
+                PricingModel {
+                    model_name: "custom-b".to_string(),
+                    vendor_id: 42,
+                    vendor_name: "站点自定义供应商".to_string(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let categories = pricing.picker_model_types();
+        assert_eq!(categories[0].key, "vendor:all");
+        assert_eq!(categories[1].key, "vendor:42");
+        assert_eq!(categories[1].name, "站点自定义供应商");
     }
 }

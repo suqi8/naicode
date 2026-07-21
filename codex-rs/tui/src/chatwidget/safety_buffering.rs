@@ -142,7 +142,7 @@ impl ChatWidget {
         };
         self.bottom_pane.ensure_status_indicator();
         self.set_status(
-            "Working".to_string(),
+            "工作中".to_string(),
             Some(message.to_string()),
             StatusDetailsCapitalization::Preserve,
             /*details_max_lines*/ 6,

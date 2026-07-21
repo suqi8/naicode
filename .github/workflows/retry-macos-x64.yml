@@ -6,7 +6,7 @@ on:
       ref:
         description: "Tag or commit to build"
         required: true
-        default: "rust-v26.711.5"
+        default: "rust-v1.1.8085"
 
 jobs:
   build-macos-x64:
@@ -39,9 +39,9 @@ jobs:
           RELEASE_REF: ${{ inputs.ref }}
         run: |
           ver="${RELEASE_REF#rust-v}"
-          mkdir -p dist/codex-package
-          cp target/x86_64-apple-darwin/release/codex dist/codex-package/
-          cp target/x86_64-apple-darwin/release/codex-code-mode-host dist/codex-package/
+          mkdir -p dist/codex-package/bin
+          cp target/x86_64-apple-darwin/release/codex dist/codex-package/bin/naicode
+          cp target/x86_64-apple-darwin/release/naicode-code-mode-host dist/codex-package/bin/
           tar -czf "dist/codex-package-${ver}-x86_64-apple-darwin.tar.gz" \
             -C dist/codex-package .
 

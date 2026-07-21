@@ -1910,7 +1910,7 @@ fn read_prompt_from_stdin(behavior: StdinPromptBehavior) -> Option<String> {
         StdinPromptBehavior::Forced => {}
         StdinPromptBehavior::OptionalAppend if stdin_is_terminal => return None,
         StdinPromptBehavior::OptionalAppend => {
-            eprintln!("Reading additional input from stdin...");
+            eprintln!("正在从标准输入读取附加内容...");
         }
     }
 

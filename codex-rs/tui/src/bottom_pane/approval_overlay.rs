@@ -917,7 +917,7 @@ fn exec_options(
                 shortcuts: keymap.deny.clone(),
             }),
             CommandExecutionApprovalDecision::Cancel => Some(ApprovalOption {
-                label: "否，并告诉 Codex 换一种做法".to_string(),
+                label: "否，并告诉 NaiCode 换一种做法".to_string(),
                 decision: ApprovalDecision::Command(CommandExecutionApprovalDecision::Cancel),
                 shortcuts: keymap.decline.clone(),
             }),
@@ -1033,7 +1033,7 @@ fn patch_options(keymap: &ApprovalKeymap) -> Vec<ApprovalOption> {
             shortcuts: keymap.approve_for_session.clone(),
         },
         ApprovalOption {
-            label: "否，并告诉 Codex 换一种做法".to_string(),
+            label: "否，并告诉 NaiCode 换一种做法".to_string(),
             decision: ApprovalDecision::FileChange(FileChangeApprovalDecision::Cancel),
             shortcuts: keymap.decline.clone(),
         },

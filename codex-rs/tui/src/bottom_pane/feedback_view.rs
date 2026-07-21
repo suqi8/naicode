@@ -555,7 +555,7 @@ pub(crate) fn feedback_upload_consent_params(
             super::SelectionItem {
                 name: "是".to_string(),
                 description: Some(
-                    "与团队分享当前 Codex 会话日志和诊断信息以便排查问题。".to_string(),
+                    "与团队分享当前 NaiCode 会话日志和诊断信息以便排查问题。".to_string(),
                 ),
                 actions: vec![yes_action],
                 dismiss_on_select: true,

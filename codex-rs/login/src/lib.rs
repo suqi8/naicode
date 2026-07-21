@@ -44,6 +44,8 @@ pub use relay::pricing::format_price_value;
 pub use relay::relay_login;
 pub use relay::relay_switch_group;
 pub use relay::relay_switch_group_with_manager;
+pub use relay::relay_update_routing;
+pub use relay::relay_update_routing_with_manager;
 pub use success_page::CODEX_OPEN_APP_URL;
 pub use success_page::LoginSuccessPage;
 pub use success_page::LoginSuccessPageBrand;

@@ -34,8 +34,8 @@ fn sqlite_home_is_blocking_file(startup_error: &LocalStateDbStartupError) -> boo
 }
 
 pub(crate) fn print_auto_backup_start(startup_error: &LocalStateDbStartupError) {
-    eprintln!("Codex couldn't start because its local database appears to be damaged.");
-    eprintln!("Moving the damaged local database aside so Codex can rebuild it from saved data.");
+    eprintln!("NaiCode 无法启动，本地数据库可能已损坏。");
+    eprintln!("正在备份损坏的数据库，NaiCode 将使用已保存的数据重新建立数据库。");
     print_technical_details(startup_error);
 }
 
@@ -49,44 +49,42 @@ pub(crate) fn confirm_fresh_start_rebuild(
     startup_error: &LocalStateDbStartupError,
     backups: &[RuntimeDbBackup],
 ) -> std::io::Result<()> {
-    eprintln!("Codex rebuilt its local database.");
-    eprintln!(
-        "Codex detected a damaged local database, moved it into a backup folder, and will continue startup with a fresh database."
-    );
-    eprintln!("Database path: {}", startup_error.database_path().display());
+    eprintln!("NaiCode 已重新建立本地数据库。");
+    eprintln!("NaiCode 检测到本地数据库损坏，已将其移至备份目录，并将使用新的数据库继续启动。");
+    eprintln!("数据库路径：{}", startup_error.database_path().display());
     if let Some(backup_folder) = backup_folder(backups) {
-        eprintln!("Backup folder: {}", backup_folder.display());
+        eprintln!("备份目录：{}", backup_folder.display());
     } else {
-        eprintln!("Backup folder: unavailable");
+        eprintln!("备份目录：不可用");
     }
 
     if std::io::stdin().is_terminal() && std::io::stderr().is_terminal() {
-        eprintln!("Press Enter to continue.");
+        eprintln!("按 Enter 继续。");
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
     } else {
-        eprintln!("Continuing startup with a fresh local database...");
+        eprintln!("正在使用新的本地数据库继续启动...");
     }
     Ok(())
 }
 
 pub(crate) fn print_diagnostic_guidance(startup_error: &LocalStateDbStartupError) {
-    eprintln!("Codex couldn't start because its local database appears to be damaged.");
-    eprintln!("Run `codex doctor` to check your setup and get next-step guidance.");
-    eprintln!("If this keeps happening, share the technical details below when asking for help.");
+    eprintln!("NaiCode 无法启动，本地数据库可能已损坏。");
+    eprintln!("请运行 `naicode doctor` 检查环境并获取修复建议。");
+    eprintln!("如果问题持续出现，请在寻求帮助时提供下方技术详情。");
     print_technical_details(startup_error);
 }
 
 pub(crate) fn print_locked_guidance(startup_error: &LocalStateDbStartupError) {
-    eprintln!("Codex couldn't start because another Codex process is using its local data.");
-    eprintln!("Quit any other copies of Codex that may still be running, then try again.");
+    eprintln!("NaiCode 无法启动，另一个 NaiCode 进程正在使用本地数据。");
+    eprintln!("请退出其他仍在运行的 NaiCode 进程，然后重试。");
     print_technical_details(startup_error);
 }
 
 fn print_technical_details(startup_error: &LocalStateDbStartupError) {
-    eprintln!("Technical details:");
-    eprintln!("  Location: {}", startup_error.database_path().display());
-    eprintln!("  Cause: {}", startup_error.detail());
+    eprintln!("技术详情：");
+    eprintln!("  位置：{}", startup_error.database_path().display());
+    eprintln!("  原因：{}", startup_error.detail());
 }
 
 fn backup_folder(backups: &[RuntimeDbBackup]) -> Option<&Path> {

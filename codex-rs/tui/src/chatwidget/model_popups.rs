@@ -43,21 +43,41 @@ impl ChatWidget {
     /// 然后触发授权 catalog 拉取；数据到达后 picker 自动切换到 Ready 状态。
     pub(crate) fn open_relay_group_popup(&mut self) {
         let tx = self.app_event_tx.clone();
-        let auto_lowest_ratio = self
-            .config
-            .config_layer_stack
-            .effective_config()
+        let effective_config = self.config.config_layer_stack.effective_config();
+        let relay = effective_config
             .get("relay")
-            .and_then(toml::Value::as_table)
-            .and_then(|relay| relay.get("auto_select_lowest_ratio"))
+            .and_then(toml::Value::as_table);
+        let auto_routing = relay
+            .and_then(|relay| relay.get("auto_switch_enabled"))
             .and_then(toml::Value::as_bool)
+            .or_else(|| {
+                relay
+                    .and_then(|relay| relay.get("auto_select_lowest_ratio"))
+                    .and_then(toml::Value::as_bool)
+            })
             .unwrap_or(true);
-        let initial_key = auto_lowest_ratio
-            .then(|| codex_login::relay::pricing::PICKER_POLICY_LOWEST_RATIO.to_string());
-        self.bottom_pane.show_relay_picker(tx.clone(), initial_key);
+        let min_ratio = relay
+            .and_then(|relay| relay.get("min_group_ratio"))
+            .and_then(toml::Value::as_float)
+            .unwrap_or(0.0);
+        let max_ratio = relay
+            .and_then(|relay| relay.get("max_group_ratio"))
+            .and_then(toml::Value::as_float)
+            .unwrap_or(0.0);
+        self.bottom_pane
+            .show_relay_picker(tx.clone(), auto_routing, min_ratio, max_ratio);
         self.request_redraw();
         let codex_home = self.config.codex_home.clone();
         tokio::spawn(async move {
+            if let Err(error) =
+                codex_login::relay_update_routing(&codex_home, auto_routing, min_ratio, max_ratio)
+                    .await
+            {
+                tx.send(AppEvent::OpenRelayGroups {
+                    result: Err(format!("同步自动分组设置失败：{error}")),
+                });
+                return;
+            }
             let result = codex_login::fetch_pricing_with_auth(
                 &codex_home,
                 codex_config::types::AuthCredentialsStoreMode::Auto,
@@ -194,7 +214,7 @@ impl ChatWidget {
                 is_current: model_name == current_model,
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::PendingRelayModelSelection {
-                        group: group_for_action.clone(),
+                        group: Some(group_for_action.clone()),
                         model: model_for_action.clone(),
                         effort: None,
                     });
@@ -382,7 +402,7 @@ impl ChatWidget {
 
         let header = self.model_menu_header(
             "选择模型和推理级别",
-            "运行 codex -m <model_name> 或在 config.toml 中配置以使用旧版模型",
+            "运行 naicode -m <model_name> 或在 config.toml 中配置以使用旧版模型",
         );
         self.bottom_pane.show_selection_view(SelectionViewParams {
             footer_hint: Some(self.bottom_pane.standard_popup_hint_line()),
@@ -549,7 +569,7 @@ impl ChatWidget {
         });
     }
 
-    pub(crate) fn open_relay_reasoning_popup(&mut self, group: String, model: String) {
+    pub(crate) fn open_relay_reasoning_popup(&mut self, group: Option<String>, model: String) {
         let preset = self
             .model_catalog
             .try_list_models()
@@ -614,7 +634,10 @@ impl ChatWidget {
 
         self.bottom_pane.show_selection_view(SelectionViewParams {
             title: Some(format!("{model} · 思考等级")),
-            subtitle: Some(format!("分组 {group} · 确认后再应用模型与分组")),
+            subtitle: Some(match group.as_deref() {
+                Some(group) => format!("手动分组 {group} · 确认后应用模型与分组"),
+                None => "自动选择倍率范围内最低的可用分组".to_string(),
+            }),
             footer_hint: Some(standard_popup_hint_line()),
             items,
             ..Default::default()

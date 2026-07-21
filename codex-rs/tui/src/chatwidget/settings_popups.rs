@@ -4,162 +4,206 @@
 //! orchestration module without changing their event wiring.
 
 use super::*;
+use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 
-fn collect_config_schema_paths(
-    schema: &serde_json::Value,
-    root: &serde_json::Value,
-    prefix: &str,
-    depth: usize,
-    paths: &mut std::collections::BTreeSet<String>,
-) {
-    if depth > 12 {
-        if !prefix.is_empty() {
-            paths.insert(format!("config.{prefix}"));
-        }
-        return;
-    }
-
-    if let Some(reference) = schema.get("$ref").and_then(serde_json::Value::as_str)
-        && let Some(name) = reference.strip_prefix("#/definitions/")
-        && let Some(definition) = root.get("definitions").and_then(|defs| defs.get(name))
-    {
-        collect_config_schema_paths(definition, root, prefix, depth + 1, paths);
-        return;
-    }
-
-    if let Some(properties) = schema
-        .get("properties")
-        .and_then(serde_json::Value::as_object)
-        && !properties.is_empty()
-    {
-        for (key, property) in properties {
-            let path = if prefix.is_empty() {
-                key.to_string()
-            } else {
-                format!("{prefix}.{key}")
-            };
-            collect_config_schema_paths(property, root, &path, depth + 1, paths);
-        }
-        return;
-    }
-
-    for keyword in ["allOf", "anyOf", "oneOf"] {
-        if let Some(variants) = schema.get(keyword).and_then(serde_json::Value::as_array) {
-            for variant in variants {
-                collect_config_schema_paths(variant, root, prefix, depth + 1, paths);
-            }
-            return;
-        }
-    }
-
-    if !prefix.is_empty() {
-        paths.insert(format!("config.{prefix}"));
-    }
+fn relay_ratio(table: Option<&toml::map::Map<String, toml::Value>>, key: &str) -> f64 {
+    table
+        .and_then(|relay| relay.get(key))
+        .and_then(|value| {
+            value
+                .as_float()
+                .or_else(|| value.as_integer().map(|value| value as f64))
+        })
+        .unwrap_or(0.0)
 }
 
-fn flatten_config_value(value: &toml::Value, prefix: &str, rows: &mut Vec<(String, String)>) {
-    match value {
-        toml::Value::Table(table) => {
-            for (key, value) in table {
-                let path = if prefix.is_empty() {
-                    key.to_string()
-                } else {
-                    format!("{prefix}.{key}")
-                };
-                flatten_config_value(value, &path, rows);
-            }
-        }
-        _ => rows.push((format!("config.{prefix}"), value.to_string())),
-    }
-}
-
-fn redact_config_value(path: &str, value: &str) -> String {
-    let sensitive = ["token", "secret", "password", "api_key", "apikey"];
-    if sensitive
-        .iter()
-        .any(|needle| path.to_ascii_lowercase().contains(needle))
-    {
-        "<已隐藏>".to_string()
-    } else {
+fn ratio_label(value: f64) -> String {
+    if value > 0.0 {
         value.to_string()
+    } else {
+        "不限".to_string()
     }
 }
 
 impl ChatWidget {
     pub(crate) fn open_config_popup(&mut self) {
-        let enabled = self
-            .config
-            .config_layer_stack
-            .effective_config()
+        let effective_config = self.config.config_layer_stack.effective_config();
+        let relay = effective_config
             .get("relay")
-            .and_then(toml::Value::as_table)
-            .and_then(|relay| relay.get("auto_select_lowest_ratio"))
+            .and_then(toml::Value::as_table);
+        let enabled = relay
+            .and_then(|relay| relay.get("auto_switch_enabled"))
             .and_then(toml::Value::as_bool)
+            .or_else(|| {
+                relay
+                    .and_then(|relay| relay.get("auto_select_lowest_ratio"))
+                    .and_then(toml::Value::as_bool)
+            })
             .unwrap_or(true);
+        let min_ratio = relay_ratio(relay, "min_group_ratio");
+        let max_ratio = relay_ratio(relay, "max_group_ratio");
         let mut items = vec![SelectionItem {
-            name: format!(
-                "Relay 自动最低倍率：{}",
-                if enabled { "开启" } else { "关闭" }
-            ),
+            name: format!("[{}] 自动选择可用分组", if enabled { "x" } else { " " }),
             description: Some(
-                "请求当前模型时自动选择可用的最低倍率分组；关闭后保留手动选择。".to_string(),
+                "按倍率从低到高选择支持当前模型的分组；失败时由中转站自动重试。".to_string(),
             ),
             is_current: enabled,
             actions: vec![Box::new(move |tx| {
-                tx.send(AppEvent::PersistRelayAutoSelection { enabled: !enabled });
+                tx.send(AppEvent::PersistRelayRouting {
+                    enabled: !enabled,
+                    min_ratio,
+                    max_ratio,
+                });
             })],
             dismiss_on_select: true,
             ..Default::default()
         }];
 
-        let mut rows = Vec::new();
-        flatten_config_value(
-            &self.config.config_layer_stack.effective_config(),
-            "",
-            &mut rows,
-        );
-        let mut current_values = rows
-            .into_iter()
-            .collect::<std::collections::BTreeMap<_, _>>();
-        current_values
-            .entry("config.relay.auto_select_lowest_ratio".to_string())
-            .or_insert_with(|| enabled.to_string());
-
-        let mut available_paths = std::collections::BTreeSet::new();
-        if let Ok(schema) = serde_json::to_value(codex_config::schema::config_schema()) {
-            collect_config_schema_paths(&schema, &schema, "", 0, &mut available_paths);
-        }
-        available_paths.extend(current_values.keys().cloned());
-        items.extend(available_paths.into_iter().map(|path| {
-            SelectionItem {
-                name: path.clone(),
-                description: Some(
-                    current_values
-                        .get(&path)
-                        .map(|value| redact_config_value(&path, value))
-                        .unwrap_or_else(|| "<未设置>".to_string()),
-                ),
-                is_disabled: true,
+        if enabled {
+            items.push(SelectionItem {
+                name: format!("最低分组倍率：{}", ratio_label(min_ratio)),
+                description: Some("低于此倍率的分组不会参与自动选择；0 表示不限制。".to_string()),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::OpenRelayRatioPrompt {
+                        edit_minimum: true,
+                        current: min_ratio,
+                        other: max_ratio,
+                    });
+                })],
+                dismiss_on_select: true,
                 ..Default::default()
-            }
-        }));
+            });
+            items.push(SelectionItem {
+                name: format!("最高分组倍率：{}", ratio_label(max_ratio)),
+                description: Some("高于此倍率的分组不会参与自动选择；0 表示不限制。".to_string()),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::OpenRelayRatioPrompt {
+                        edit_minimum: false,
+                        current: max_ratio,
+                        other: min_ratio,
+                    });
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            });
+        }
+
+        items.extend([
+            SelectionItem {
+                name: "模型与推理强度".to_string(),
+                description: Some("选择默认模型，并设置模型支持的思考等级。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenRelayModelPicker))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "权限与沙箱".to_string(),
+                description: Some("配置命令审批方式、文件访问范围和网络权限。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenPermissionsPopup))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "技能管理".to_string(),
+                description: Some("启用或关闭已安装的技能。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenManageSkillsPopup))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "界面主题".to_string(),
+                description: Some("选择 NaiCode 的配色主题。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenThemeSettings))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "快捷键".to_string(),
+                description: Some("查看和修改键盘操作。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenKeymapSettings))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "实验功能".to_string(),
+                description: Some("启用或关闭尚在测试中的功能。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenExperimentalSettings))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "记忆".to_string(),
+                description: Some("配置会话记忆的读取、生成与清理。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenMemoriesSettings))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "MCP 服务器".to_string(),
+                description: Some("查看工具服务器及其登录状态。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenMcpSettings))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "应用连接器".to_string(),
+                description: Some("查看可连接的外部应用。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenAppsSettings))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "插件".to_string(),
+                description: Some("查看和管理 NaiCode 插件。".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenPluginsSettings))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ]);
 
         let mut header = ColumnRenderable::new();
         header.push(Line::from("配置".bold()));
-        header.push(Line::from(
-            "显示当前有效的 config.xxx；可编辑项使用 Codex 原有配置格式。".dim(),
-        ));
+        header.push(Line::from("使用上下键选择，按 Enter 修改。".dim()));
         self.bottom_pane.show_selection_view(SelectionViewParams {
             header: Box::new(header),
             items,
-            is_searchable: true,
-            search_placeholder: Some("筛选 config.xxx".to_string()),
             footer_hint: Some(standard_popup_hint_line()),
             ..Default::default()
         });
     }
 
-    pub(super) fn open_theme_picker(&mut self) {
+    pub(crate) fn open_relay_ratio_prompt(&mut self, edit_minimum: bool, current: f64, other: f64) {
+        let tx = self.app_event_tx.clone();
+        let title = if edit_minimum {
+            "设置最低分组倍率"
+        } else {
+            "设置最高分组倍率"
+        };
+        let view = CustomPromptView::new(
+            title.to_string(),
+            "输入倍率，0 表示不限制".to_string(),
+            current.to_string(),
+            Some("例如：0.1、0.15；按 Enter 保存".to_string()),
+            Box::new(move |text| {
+                let Ok(value) = text.trim().parse::<f64>() else {
+                    return;
+                };
+                let (min_ratio, max_ratio) = if edit_minimum {
+                    (value, other)
+                } else {
+                    (other, value)
+                };
+                tx.send(AppEvent::PersistRelayRouting {
+                    enabled: true,
+                    min_ratio,
+                    max_ratio,
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn open_theme_picker(&mut self) {
         let codex_home = codex_utils_home_dir::find_codex_home().ok();
         let terminal_width = self
             .last_rendered_width

@@ -8,11 +8,11 @@ use codex_utils_cli::SharedCliOptions;
 #[derive(Parser, Clone, Debug)]
 #[command(version)]
 pub struct Cli {
-    /// Optional user prompt to start the session.
+    /// 用于开始会话的可选提示词。
     #[arg(value_name = "PROMPT", value_hint = clap::ValueHint::Other)]
     pub prompt: Option<String>,
 
-    /// Error out when config.toml contains fields that are not recognized by this version of Codex.
+    /// 当 config.toml 包含当前 NaiCode 版本无法识别的字段时直接报错。
     #[arg(long = "strict-config", default_value_t = false)]
     pub strict_config: bool,
 
@@ -57,17 +57,17 @@ pub struct Cli {
     #[clap(flatten)]
     pub shared: TuiSharedCliOptions,
 
-    /// Configure when the model requires human approval before executing a command.
+    /// 设置模型在执行命令前何时需要人工批准。
     #[arg(long = "ask-for-approval", short = 'a')]
     pub approval_policy: Option<ApprovalModeCliArg>,
 
-    /// Enable live web search. When enabled, the native Responses `web_search` tool is available to the model (no per‑call approval).
+    /// 启用实时网页搜索；模型可直接使用 Responses `web_search` 工具。
     #[arg(long = "search", default_value_t = false)]
     pub web_search: bool,
 
-    /// Disable alternate screen mode
+    /// 关闭终端备用屏幕模式。
     ///
-    /// Runs the TUI in inline mode, preserving terminal scrollback history.
+    /// 以内联模式运行交互界面，并保留终端滚动历史。
     #[arg(long = "no-alt-screen", default_value_t = false)]
     pub no_alt_screen: bool,
 

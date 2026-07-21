@@ -1,0 +1,52 @@
+name: prepare-naicode-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version-and-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest="$(git tag --list 'rust-v1.*.*' --sort=-v:refname | head -n1)"
+          if [[ -n "$latest" ]]; then
+            release_no="$(cut -d. -f2 <<<"${latest#rust-v}")"
+          else
+            release_no="$(sed -nE 's/^version = "1\.([0-9]+)\.[0-9]+"/\1/p' codex-rs/Cargo.toml | head -n1)"
+          fi
+          next_release=$((release_no + 1))
+          commit_count=$(( $(git rev-list --count HEAD) + 1 ))
+          version="1.${next_release}.${commit_count}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Update workspace version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          sed -i -E "0,/^version = \".*\"/s//version = \"$VERSION\"/" codex-rs/Cargo.toml
+          cargo metadata --manifest-path codex-rs/Cargo.toml --no-deps >/dev/null
+
+      - name: Commit and tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          git config user.name "suqi8"
+          git config user.email "suqi8@users.noreply.github.com"
+          git add codex-rs/Cargo.toml codex-rs/Cargo.lock
+          git commit -m "chore: release NaiCode $VERSION"
+          git tag "rust-v$VERSION"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+          git push origin "rust-v$VERSION"

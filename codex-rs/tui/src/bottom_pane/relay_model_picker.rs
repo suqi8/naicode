@@ -21,13 +21,24 @@ use codex_login::GroupInfo;
 use codex_login::PricingModel;
 use codex_login::format_group_ratio;
 use codex_login::format_price_value;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyCode;
+use crossterm::event::KeyEvent;
 use ratatui::buffer::Buffer;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use ratatui::layout::Constraint;
+use ratatui::layout::Direction;
+use ratatui::layout::Layout;
+use ratatui::layout::Rect;
+use ratatui::style::Modifier;
+use ratatui::style::Style;
+use ratatui::text::Line;
+use ratatui::text::Span;
+use ratatui::widgets::Block;
+use ratatui::widgets::Borders;
+use ratatui::widgets::List;
+use ratatui::widgets::ListItem;
+use ratatui::widgets::Paragraph;
+use unicode_width::UnicodeWidthChar;
+use unicode_width::UnicodeWidthStr;
 
 /// 每个模型固定占两行：模型名和高频价格摘要。
 const CARD_HEIGHT: usize = 2;
@@ -78,6 +89,10 @@ pub(crate) struct RelayModelPicker {
     is_complete: bool,
     completion: Option<ViewCompletion>,
     app_event_tx: AppEventSender,
+    /// OAuth 自动路由会由中转站为每次请求选择分组。
+    auto_routing: bool,
+    min_group_ratio: f64,
+    max_group_ratio: f64,
     /// 当前已选分组名；None 时使用第一个分组。
     selected_group: Option<String>,
     /// 最近一次渲染中模型列表可见卡片数。
@@ -113,27 +128,31 @@ impl LayoutMode {
 
 impl RelayModelPicker {
     pub(crate) fn new(state: RelayPickerState, app_event_tx: AppEventSender) -> Self {
-        Self::new_with_initial_key(state, app_event_tx, None)
+        Self::new_with_routing(state, app_event_tx, false, 0.0, 0.0)
     }
 
-    pub(crate) fn new_with_initial_key(
+    pub(crate) fn new_with_routing(
         state: RelayPickerState,
         app_event_tx: AppEventSender,
-        initial_key: Option<String>,
+        auto_routing: bool,
+        min_group_ratio: f64,
+        max_group_ratio: f64,
     ) -> Self {
-        // 自动策略（若提供）优先，其次使用服务端 selected_group。
+        // 自动模式从未筛选的模型列表开始；手动模式恢复服务端选中的具体分组。
         let selected_group = if let RelayPickerState::Ready { ref pricing } = state {
-            initial_key
-                .clone()
-                .or_else(|| {
-                    pricing
-                        .selected_group
-                        .as_ref()
-                        .map(|group| format!("group:{group}"))
-                })
-                .or_else(|| pricing.picker_groups().into_iter().next().map(|g| g.key))
+            if auto_routing {
+                Some("vendor:all".to_string())
+            } else {
+                pricing
+                    .selected_group
+                    .as_ref()
+                    .map(|group| format!("group:{group}"))
+                    .or_else(|| pricing.groups().into_iter().next().map(|g| g.key))
+            }
+        } else if auto_routing {
+            Some("vendor:all".to_string())
         } else {
-            initial_key
+            None
         };
 
         let mut picker = Self {
@@ -142,10 +161,17 @@ impl RelayModelPicker {
             model_scroll: ScrollState::new(),
             search_query: String::new(),
             is_searching: false,
-            focus_side: FocusSide::Groups,
+            focus_side: if auto_routing {
+                FocusSide::Models
+            } else {
+                FocusSide::Groups
+            },
             is_complete: false,
             completion: None,
             app_event_tx,
+            auto_routing,
+            min_group_ratio,
+            max_group_ratio,
             selected_group,
             visible_model_cards: Cell::new(1),
         };
@@ -161,7 +187,7 @@ impl RelayModelPicker {
         let RelayPickerState::Ready { ref pricing } = self.state else {
             return;
         };
-        let groups = pricing.picker_groups();
+        let groups = self.picker_entries(pricing);
         let n = groups.len();
         if n == 0 {
             return;
@@ -181,17 +207,21 @@ impl RelayModelPicker {
     pub(crate) fn set_pricing(&mut self, result: Result<codex_login::RelayPricing, String>) {
         match result {
             Ok(pricing) => {
-                let picker_groups = pricing.picker_groups();
+                let picker_groups = self.picker_entries(&pricing);
                 let selected = self
                     .selected_group
                     .as_ref()
                     .filter(|key| picker_groups.iter().any(|group| &group.key == *key))
                     .cloned()
                     .or_else(|| {
-                        pricing
-                            .selected_group
-                            .as_ref()
-                            .map(|group| format!("group:{group}"))
+                        if self.auto_routing {
+                            Some("vendor:all".to_string())
+                        } else {
+                            pricing
+                                .selected_group
+                                .as_ref()
+                                .map(|group| format!("group:{group}"))
+                        }
                     })
                     .or_else(|| picker_groups.into_iter().next().map(|group| group.key));
                 self.selected_group = selected;
@@ -217,6 +247,26 @@ impl RelayModelPicker {
             }
         }
         groups.first().map(|g| g.key.as_str())
+    }
+
+    fn picker_entries(&self, pricing: &codex_login::RelayPricing) -> Vec<GroupInfo> {
+        if self.auto_routing {
+            pricing.picker_model_types()
+        } else {
+            pricing.groups()
+        }
+    }
+
+    fn model_choices<'a>(
+        &self,
+        pricing: &'a codex_login::RelayPricing,
+        picker_key: &str,
+    ) -> Vec<codex_login::PricingModelChoice<'a>> {
+        if self.auto_routing {
+            pricing.auto_routed_models(picker_key, self.min_group_ratio, self.max_group_ratio)
+        } else {
+            pricing.picker_models(picker_key)
+        }
     }
 
     /// 对 `models` 按 `search_query` 过滤（大小写不敏感）。
@@ -277,16 +327,16 @@ impl RelayModelPicker {
         let RelayPickerState::Ready { ref pricing } = self.state else {
             return;
         };
-        let groups = pricing.picker_groups();
+        let groups = self.picker_entries(pricing);
         let picker_key = match self.current_group_key(&groups) {
             Some(g) => g.to_string(),
             None => return,
         };
-        let filtered = self.filtered_models(pricing.picker_models(&picker_key));
+        let filtered = self.filtered_models(self.model_choices(pricing, &picker_key));
         let idx = self.model_scroll.selected_idx.unwrap_or(0);
         if let Some(choice) = filtered.get(idx) {
             self.app_event_tx.send(AppEvent::OpenRelayReasoningPopup {
-                group: choice.group.clone(),
+                group: (!self.auto_routing).then(|| choice.group.clone()),
                 model: choice.model.model_name.clone(),
             });
             self.is_complete = true;
@@ -299,18 +349,18 @@ impl RelayModelPicker {
         let RelayPickerState::Ready { ref pricing } = self.state else {
             return;
         };
-        let groups = pricing.picker_groups();
+        let groups = self.picker_entries(pricing);
         let idx = self.group_scroll.selected_idx.unwrap_or(0);
         // Keep the legacy real-group index mapping when an older session
         // restored a concrete group key. This preserves group switching for
         // existing state while new sessions use policy/type entries.
-        let legacy_groups = self
-            .selected_group
-            .as_deref()
-            .is_some_and(|key| {
-                key.starts_with("group:")
-                    || pricing.groups().iter().any(|g| g.key == key || g.name == key)
-            });
+        let legacy_groups = self.selected_group.as_deref().is_some_and(|key| {
+            key.starts_with("group:")
+                || pricing
+                    .groups()
+                    .iter()
+                    .any(|g| g.key == key || g.name == key)
+        });
         let real_groups = pricing.groups();
         let target = if legacy_groups {
             real_groups.get(idx).or_else(|| groups.get(idx))
@@ -318,10 +368,11 @@ impl RelayModelPicker {
             groups.get(idx)
         };
         if let Some(g) = target {
-            let next_key = if legacy_groups && !self
-                .selected_group
-                .as_deref()
-                .is_some_and(|key| key.starts_with("group:"))
+            let next_key = if legacy_groups
+                && !self
+                    .selected_group
+                    .as_deref()
+                    .is_some_and(|key| key.starts_with("group:"))
             {
                 g.name.clone()
             } else {
@@ -489,26 +540,39 @@ impl RelayModelPicker {
             return;
         }
         let mode = LayoutMode::from_width(area.width);
-        let groups = pricing.picker_groups();
+        let groups = self.picker_entries(pricing);
         let picker_key = self.current_group_key(&groups).unwrap_or("");
         let sym = &pricing.display.currency_symbol;
         let sym = if sym.is_empty() { "¥" } else { sym.as_str() };
 
         match mode {
             LayoutMode::Wide | LayoutMode::Medium => {
-                // 水平分割：[groups | divider | models]
                 let chunks = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([
-                        Constraint::Length(GROUP_COL_WIDTH),
-                        Constraint::Length(1),
-                        Constraint::Min(0),
-                    ])
+                    .constraints(if self.auto_routing {
+                        [
+                            Constraint::Min(0),
+                            Constraint::Length(1),
+                            Constraint::Length(GROUP_COL_WIDTH),
+                        ]
+                    } else {
+                        [
+                            Constraint::Length(GROUP_COL_WIDTH),
+                            Constraint::Length(1),
+                            Constraint::Min(0),
+                        ]
+                    })
                     .split(area);
 
-                self.render_group_list(&groups, picker_key, chunks[0], buf);
-                Self::render_divider(chunks[1], buf);
-                self.render_model_list(pricing, picker_key, sym, mode, chunks[2], buf);
+                if self.auto_routing {
+                    self.render_model_list(pricing, picker_key, sym, mode, chunks[0], buf);
+                    Self::render_divider(chunks[1], buf);
+                    self.render_group_list(&groups, picker_key, chunks[2], buf);
+                } else {
+                    self.render_group_list(&groups, picker_key, chunks[0], buf);
+                    Self::render_divider(chunks[1], buf);
+                    self.render_model_list(pricing, picker_key, sym, mode, chunks[2], buf);
+                }
             }
             LayoutMode::Narrow => {
                 // 顶行：当前组名；剩余空间：模型列表
@@ -560,7 +624,11 @@ impl RelayModelPicker {
 
         let inner = Block::default()
             .title(Span::styled(
-                "类型 / 策略",
+                if self.auto_routing {
+                    "模型类型"
+                } else {
+                    "分组"
+                },
                 Style::default().add_modifier(Modifier::BOLD),
             ))
             .borders(Borders::ALL)
@@ -648,7 +716,22 @@ impl RelayModelPicker {
                 Style::default().fg(palette.border_muted),
             )
         } else {
-            Span::styled("模型", Style::default().add_modifier(Modifier::BOLD))
+            let title = if self.auto_routing {
+                let min = if self.min_group_ratio > 0.0 {
+                    format!("{}", self.min_group_ratio)
+                } else {
+                    "不限".to_string()
+                };
+                let max = if self.max_group_ratio > 0.0 {
+                    format!("{}", self.max_group_ratio)
+                } else {
+                    "不限".to_string()
+                };
+                format!("模型 · 自动分组 {min}–{max}")
+            } else {
+                "模型 · 手动分组".to_string()
+            };
+            Span::styled(title, Style::default().add_modifier(Modifier::BOLD))
         };
 
         let block = Block::default()
@@ -663,7 +746,7 @@ impl RelayModelPicker {
             return;
         }
 
-        let filtered = self.filtered_models(pricing.picker_models(picker_key));
+        let filtered = self.filtered_models(self.model_choices(pricing, picker_key));
 
         if filtered.is_empty() {
             let msg = "（无匹配模型）";
@@ -866,20 +949,28 @@ impl BottomPaneView for RelayModelPicker {
             return;
         };
 
-        let groups = pricing.picker_groups();
+        let groups = self.picker_entries(pricing);
         let n_groups = groups.len();
         let picker_key = self.current_group_key(&groups).unwrap_or("").to_string();
         let n_models = self
-            .filtered_models(pricing.picker_models(&picker_key))
+            .filtered_models(self.model_choices(pricing, &picker_key))
             .len();
 
         match key_event.code {
             // --- 焦点切换 ---
             KeyCode::Left => {
-                self.focus_side = FocusSide::Groups;
+                self.focus_side = if self.auto_routing {
+                    FocusSide::Models
+                } else {
+                    FocusSide::Groups
+                };
             }
             KeyCode::Right => {
-                self.focus_side = FocusSide::Models;
+                self.focus_side = if self.auto_routing {
+                    FocusSide::Groups
+                } else {
+                    FocusSide::Models
+                };
             }
 
             // --- 导航 ---
@@ -970,8 +1061,10 @@ impl BottomPaneView for RelayModelPicker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_login::EffectivePrice;
+    use codex_login::PricingDisplay;
+    use codex_login::PricingModel;
     use codex_login::RelayPricing;
-    use codex_login::{EffectivePrice, PricingDisplay, PricingModel};
     use std::collections::HashMap;
 
     // --- 辅助构造器 ---
@@ -1186,6 +1279,40 @@ mod tests {
         assert_eq!(picker.selected_group.as_deref(), Some("g2"), "组应已切换");
         // 模型游标应重置
         assert_eq!(picker.model_scroll.selected_idx, Some(0), "模型游标应重置");
+    }
+
+    #[test]
+    fn automatic_mode_selects_model_without_fixed_group() {
+        let mut pricing = make_pricing(
+            &["cheap", "expensive"],
+            "gpt-test",
+            &[("cheap", 0.1, 0.5), ("expensive", 0.2, 0.6)],
+        );
+        pricing.group_ratio.insert("cheap".to_string(), 0.1.into());
+        pricing
+            .group_ratio
+            .insert("expensive".to_string(), 0.2.into());
+        let (raw_tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let tx = crate::app_event_sender::AppEventSender::new(raw_tx);
+        let mut picker = RelayModelPicker::new_with_routing(
+            RelayPickerState::Ready { pricing },
+            tx,
+            true,
+            0.1,
+            0.15,
+        );
+
+        assert_eq!(picker.focus_side, FocusSide::Models);
+        assert_eq!(picker.selected_group.as_deref(), Some("vendor:all"));
+        picker.confirm_model_selection();
+
+        match rx.try_recv().expect("model selection event") {
+            AppEvent::OpenRelayReasoningPopup { group, model } => {
+                assert_eq!(group, None);
+                assert_eq!(model, "gpt-test");
+            }
+            event => panic!("unexpected event: {event:?}"),
+        }
     }
 
     // --- 整卡滚动：ensure_visible 以模型索引为单位 ---

@@ -33,9 +33,9 @@ fn host_program_override_takes_precedence() {
 #[test]
 fn host_program_is_next_to_the_main_executable_even_when_missing() {
     let executable_name = if cfg!(windows) {
-        "codex-code-mode-host.exe"
+        "naicode-code-mode-host.exe"
     } else {
-        "codex-code-mode-host"
+        "naicode-code-mode-host"
     };
 
     assert_eq!(
@@ -50,9 +50,9 @@ fn host_program_is_next_to_the_main_executable_even_when_missing() {
 #[test]
 fn host_program_falls_back_to_its_name_when_main_executable_is_unknown() {
     let executable_name = if cfg!(windows) {
-        "codex-code-mode-host.exe"
+        "naicode-code-mode-host.exe"
     } else {
-        "codex-code-mode-host"
+        "naicode-code-mode-host"
     };
 
     assert_eq!(

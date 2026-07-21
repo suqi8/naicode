@@ -3,9 +3,9 @@ source: tui/src/chatwidget/tests/exec_flow.rs
 expression: normalized_backend_snapshot(terminal.backend())
 ---
 "                                                                                "
-"• Working (0s • esc to interrupt) · 1 background terminal running · /ps to view…"
+"• 工作中 (0s • 按 esc 中断) · 1 个后台终端正在运行 · /ps 查看 · /stop 关闭      " Hidden by multi-width symbols: [(3, " "), (5, " "), (7, " "), (16, " "), (23, " "), (25, " "), (33, " "), (35, " "), (37, " "), (39, " "), (41, " "), (43, " "), (45, " "), (47, " "), (49, " "), (58, " "), (60, " "), (71, " "), (73, " ")]
 "                                                                                "
 "                                                                                "
 "› Ask Codex to do anything                                                      "
 "                                                                                "
-"  gpt-5.6-sol default · /tmp/project                                            "
+"  gpt-5.6-sol 默认 · /tmp/project                                             " Hidden by multi-width symbols: [(15, " "), (17, " ")]

@@ -1,4 +1,4 @@
-//! Shared command-line flags used by both interactive and non-interactive Codex entry points.
+//! NaiCode 交互与非交互入口共用的命令行参数。
 
 use crate::SandboxModeCliArg;
 use clap::Args;
@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 #[derive(Args, Clone, Debug, Default)]
 pub struct SharedCliOptions {
-    /// Optional image(s) to attach to the initial prompt.
+    /// 附加到初始提示词的可选图片。
     #[arg(
         long = "image",
         short = 'i',
@@ -17,30 +17,29 @@ pub struct SharedCliOptions {
     )]
     pub images: Vec<PathBuf>,
 
-    /// Model the agent should use.
+    /// NaiCode 使用的模型。
     #[arg(long, short = 'm')]
     pub model: Option<String>,
 
-    /// Use open-source provider.
+    /// 使用开源模型服务商。
     #[arg(long = "oss", default_value_t = false)]
     pub oss: bool,
 
-    /// Specify which local provider to use (lmstudio or ollama).
-    /// If not specified with --oss, will use config default or show selection.
+    /// 指定本地模型服务商（lmstudio 或 ollama）。
+    /// 与 --oss 一起使用时，未指定则读取配置或显示选择界面。
     #[arg(long = "local-provider")]
     pub oss_provider: Option<String>,
 
-    /// Layer $CODEX_HOME/<name>.config.toml on top of the base user config.
+    /// 在基础配置之上加载 $CODEX_HOME/<name>.config.toml。
     #[arg(long = "profile", short = 'p')]
     pub config_profile_v2: Option<ProfileV2Name>,
 
-    /// Select the sandbox policy to use when executing model-generated shell
-    /// commands.
+    /// 选择执行模型生成命令时使用的沙箱策略。
     #[arg(long = "sandbox", short = 's')]
     pub sandbox_mode: Option<SandboxModeCliArg>,
 
-    /// Skip all confirmation prompts and execute commands without sandboxing.
-    /// EXTREMELY DANGEROUS. Intended solely for running in environments that are externally sandboxed.
+    /// 跳过全部确认并在无沙箱环境中执行命令。
+    /// 极度危险，仅用于外部已经提供隔离的环境。
     #[arg(
         long = "dangerously-bypass-approvals-and-sandbox",
         alias = "yolo",
@@ -48,16 +47,16 @@ pub struct SharedCliOptions {
     )]
     pub dangerously_bypass_approvals_and_sandbox: bool,
 
-    /// Run enabled hooks without requiring persisted hook trust for this invocation.
-    /// DANGEROUS. Intended only for automation that already vets hook sources.
+    /// 本次运行不检查已启用 Hook 的持久信任状态。
+    /// 有危险，仅用于已验证 Hook 来源的自动化环境。
     #[arg(long = "dangerously-bypass-hook-trust", default_value_t = false)]
     pub bypass_hook_trust: bool,
 
-    /// Tell the agent to use the specified directory as its working root.
+    /// 将指定目录设为 NaiCode 的工作根目录。
     #[clap(long = "cd", short = 'C', value_name = "DIR")]
     pub cwd: Option<PathBuf>,
 
-    /// Additional directories that should be writable alongside the primary workspace.
+    /// 除主工作区外允许写入的其他目录。
     #[arg(long = "add-dir", value_name = "DIR", value_hint = clap::ValueHint::DirPath)]
     pub add_dir: Vec<PathBuf>,
 }

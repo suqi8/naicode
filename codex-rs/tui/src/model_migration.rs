@@ -82,7 +82,7 @@ pub(crate) fn migration_copy_for_models(
     }
 
     let heading_text = Span::from(format!(
-        "Codex 刚刚完成升级。为你介绍 {target_display_name}。"
+        "NaiCode 刚刚完成升级。为你介绍 {target_display_name}。"
     ))
     .bold();
     let description_line: Line<'static>;

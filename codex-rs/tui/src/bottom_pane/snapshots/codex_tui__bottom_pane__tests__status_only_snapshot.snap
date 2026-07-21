@@ -2,9 +2,9 @@
 source: tui/src/bottom_pane/mod.rs
 expression: "render_snapshot(&pane, area)"
 ---
-• Working (0s • esc to interrupt)               
+• 工 作 中  (0s • 按  esc 中 断 )                     
                                                 
                                                 
 › Ask Codex to do anything                      
                                                 
-  ? for shortcuts            100% context left
+  ? 查 看 快 捷 键                  剩 余 上 下 文  100%

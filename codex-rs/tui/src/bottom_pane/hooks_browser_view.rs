@@ -748,7 +748,7 @@ fn event_description(event_name: HookEventName) -> &'static str {
         HookEventName::UserPromptSubmit => "用户提交提示词时",
         HookEventName::SubagentStart => "创建子代理时",
         HookEventName::SubagentStop => "子代理结束其回合前",
-        HookEventName::Stop => "Codex 结束其回合前",
+        HookEventName::Stop => "NaiCode 结束其回合前",
     }
 }
 

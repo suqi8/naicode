@@ -352,9 +352,7 @@ impl ChatWidget {
                 "You can still use Codex in a non-admin sandbox. It carries greater risk if prompt injected."
             ]);
         } else {
-            lines.push(line![
-                "Your organization requires the default sandbox before Codex can continue."
-            ]);
+            lines.push(line!["组织策略要求启用默认沙箱后 NaiCode 才能继续运行。"]);
         }
         lines.push(line![
             "Learn more <https://developers.openai.com/codex/windows>"

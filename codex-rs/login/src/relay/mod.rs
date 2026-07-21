@@ -177,6 +177,60 @@ pub async fn relay_switch_group_with_manager(
     Ok(())
 }
 
+pub async fn relay_update_routing_with_manager(
+    auth_manager: std::sync::Arc<AuthManager>,
+    enabled: bool,
+    min_ratio: f64,
+    max_ratio: f64,
+) -> Result<(), RelayLoginError> {
+    if min_ratio < 0.0 || max_ratio < 0.0 {
+        return Err(RelayLoginError::Io("倍率不能为负数".to_string()));
+    }
+    if min_ratio > 0.0 && max_ratio > 0.0 && max_ratio < min_ratio {
+        return Err(RelayLoginError::Io("最高倍率不能低于最低倍率".to_string()));
+    }
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/cli/oauth/routing", api::RELAY_BASE_URL);
+    let payload = serde_json::json!({
+        "enabled": enabled,
+        "min_ratio": if enabled { min_ratio } else { 0.0 },
+        "max_ratio": if enabled { max_ratio } else { 0.0 },
+    });
+    let response = auth_manager
+        .execute_relay_request(|token| client.put(&url).bearer_auth(token).json(&payload))
+        .await?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let message = response.text().await.unwrap_or_default();
+        return Err(RelayLoginError::Io(format!(
+            "[routing_http] OAuth 路由设置失败: {status} {message}"
+        )));
+    }
+    Ok(())
+}
+
+pub async fn relay_update_routing(
+    codex_home: &Path,
+    enabled: bool,
+    min_ratio: f64,
+    max_ratio: f64,
+) -> Result<(), RelayLoginError> {
+    let auth_manager = AuthManager::shared(
+        codex_home.to_path_buf(),
+        false,
+        AuthCredentialsStoreMode::Auto,
+        None,
+        None,
+        AuthKeyringBackendKind::default(),
+        None,
+    )
+    .await;
+    if auth_manager.get_api_auth_mode() != Some(codex_protocol::auth::AuthMode::RelayOAuthTokens) {
+        return Err(RelayLoginError::NotLoggedIn);
+    }
+    relay_update_routing_with_manager(auth_manager, enabled, min_ratio, max_ratio).await
+}
+
 /// 换分组：OAuth 模式使用 AuthManager 的统一授权执行器；旧账号/session 模式保留
 /// 原 PUT /api/token/。兼容入口在远端成功后提交 relay.json 缓存。
 pub async fn relay_switch_group(codex_home: &Path, new_group: &str) -> Result<(), RelayLoginError> {

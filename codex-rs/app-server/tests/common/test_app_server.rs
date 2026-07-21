@@ -1875,7 +1875,7 @@ impl TestAppServerBuilder {
             .iter()
             .any(|(key, _)| key == CODE_MODE_HOST_PATH_ENV_VAR)
             && let Ok(code_mode_host_program) =
-                codex_utils_cargo_bin::cargo_bin("codex-code-mode-host")
+                codex_utils_cargo_bin::cargo_bin("naicode-code-mode-host")
         {
             env_overrides.insert(
                 0,

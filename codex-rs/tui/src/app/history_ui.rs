@@ -5,7 +5,7 @@
 
 use super::*;
 
-const DESKTOP_THREAD_OPENED_MESSAGE: &str = "已在 Codex Desktop 中打开此会话。";
+const DESKTOP_THREAD_OPENED_MESSAGE: &str = "已在 NaiCode Desktop 中打开此会话。";
 
 impl App {
     pub(super) fn insert_history_cell(&mut self, tui: &mut tui::Tui, cell: Box<dyn HistoryCell>) {
@@ -178,7 +178,7 @@ impl App {
 }
 
 fn desktop_thread_open_error_message(err: &str) -> String {
-    format!("无法在 Codex Desktop 中打开此会话：{err}。请安装或启动 Codex Desktop 后重试。")
+    format!("无法在 NaiCode Desktop 中打开此会话：{err}。请安装或启动 NaiCode Desktop 后重试。")
 }
 
 #[cfg(target_os = "macos")]
@@ -186,12 +186,12 @@ fn open_desktop_thread_url(url: &str) -> Result<(), String> {
     let status = std::process::Command::new("open")
         .arg(url)
         .status()
-        .map_err(|err| format!("failed to invoke `open`: {err}"))?;
+        .map_err(|err| format!("调用 `open` 失败：{err}"))?;
 
     if status.success() {
         Ok(())
     } else {
-        Err(format!("`open {url}` exited with {status}"))
+        Err(format!("`open {url}` 已退出，状态：{status}"))
     }
 }
 
@@ -203,7 +203,7 @@ fn open_desktop_thread_url(url: &str) -> Result<(), String> {
         .arg("-Command")
         .arg(&script)
         .output()
-        .map_err(|err| format!("failed to launch Codex Desktop through PowerShell: {err}"))?;
+        .map_err(|err| format!("通过 PowerShell 启动 NaiCode Desktop 失败：{err}"))?;
 
     if output.status.success() {
         return Ok(());
@@ -212,7 +212,7 @@ fn open_desktop_thread_url(url: &str) -> Result<(), String> {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if stderr.is_empty() {
         Err(format!(
-            "failed to launch Codex Desktop through PowerShell with {}",
+            "通过 PowerShell 启动 NaiCode Desktop 失败，状态：{}",
             output.status
         ))
     } else {
@@ -230,7 +230,7 @@ $url = {url}
 
 $installLocation = (Get-AppxPackage -Name OpenAI.Codex -ErrorAction SilentlyContinue).InstallLocation
 if ([string]::IsNullOrWhiteSpace($installLocation)) {{
-    Write-Error '未安装 Codex Desktop 程序包'
+    Write-Error '未安装 NaiCode Desktop 程序包'
     exit 1
 }}
 
@@ -238,11 +238,11 @@ $appDir = Join-Path $installLocation 'app'
 $exe = Join-Path $appDir 'Codex.exe'
 $app = Join-Path $appDir 'resources\app.asar'
 if (-not (Test-Path $exe)) {{
-    Write-Error "在 $exe 未找到 Codex Desktop 可执行文件"
+    Write-Error "在 $exe 未找到 NaiCode Desktop 可执行文件"
     exit 1
 }}
 if (-not (Test-Path $app)) {{
-    Write-Error "在 $app 未找到 Codex Desktop 应用包"
+    Write-Error "在 $app 未找到 NaiCode Desktop 应用包"
     exit 1
 }}
 
@@ -258,7 +258,7 @@ fn powershell_single_quoted_string(value: &str) -> String {
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn open_desktop_thread_url(_url: &str) -> Result<(), String> {
-    Err("Codex Desktop 仅在 macOS 和 Windows 上可用".to_string())
+    Err("NaiCode Desktop 仅在 macOS 和 Windows 上可用".to_string())
 }
 
 #[cfg(test)]

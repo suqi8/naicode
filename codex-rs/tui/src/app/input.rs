@@ -13,7 +13,7 @@ impl App {
             Err(external_editor::EditorError::MissingEditor) => {
                 self.chat_widget
                     .add_to_history(history_cell::new_error_event(
-                        "无法打开外部编辑器：请在启动 Codex 前设置 $VISUAL 或 $EDITOR。"
+                        "无法打开外部编辑器：请在启动 NaiCode 前设置 $VISUAL 或 $EDITOR。"
                             .to_string(),
                     ));
                 self.reset_external_editor_state(tui);
