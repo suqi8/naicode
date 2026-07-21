@@ -219,6 +219,7 @@ jobs:
       - build-macos-x64
       - build-windows-x64
     runs-on: ubuntu-latest
+    environment: NPM_TOKEN
     permissions:
       contents: write
     steps:
