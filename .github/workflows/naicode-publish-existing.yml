@@ -57,13 +57,13 @@ jobs:
             --artifacts-dir "${GITHUB_WORKSPACE}/dist" \
             --package codex
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ inputs.release_tag }}
-          tag_name: ${{ inputs.release_tag }}
-          generate_release_notes: true
-          files: dist/**
+      - name: Create GitHub Release if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" dist/** --generate-notes
 
       - name: Publish to npm
         env:
