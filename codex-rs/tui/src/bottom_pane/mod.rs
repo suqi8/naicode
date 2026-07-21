@@ -1064,10 +1064,15 @@ impl BottomPane {
     }
 
     /// Show the relay model picker in Loading state.
-    pub(crate) fn show_relay_picker(&mut self, app_event_tx: AppEventSender) {
-        let picker = relay_model_picker::RelayModelPicker::new(
+    pub(crate) fn show_relay_picker(
+        &mut self,
+        app_event_tx: AppEventSender,
+        initial_key: Option<String>,
+    ) {
+        let picker = relay_model_picker::RelayModelPicker::new_with_initial_key(
             relay_model_picker::RelayPickerState::Loading,
             app_event_tx,
+            initial_key,
         );
         self.push_view(Box::new(picker));
     }

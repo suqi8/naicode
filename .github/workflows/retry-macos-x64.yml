@@ -1,0 +1,51 @@
+name: retry-macos-x64
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag or commit to build"
+        required: true
+        default: "rust-v26.711.5"
+
+jobs:
+  build-macos-x64:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Setup rusty-v8 artifacts
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: x86_64-apple-darwin
+
+      - name: Build
+        working-directory: codex-rs
+        run: |
+          cargo build -p codex-cli -p codex-code-mode-host \
+            --release --target x86_64-apple-darwin
+
+      - name: Package
+        working-directory: codex-rs
+        shell: bash
+        env:
+          RELEASE_REF: ${{ inputs.ref }}
+        run: |
+          ver="${RELEASE_REF#rust-v}"
+          mkdir -p dist/codex-package
+          cp target/x86_64-apple-darwin/release/codex dist/codex-package/
+          cp target/x86_64-apple-darwin/release/codex-code-mode-host dist/codex-package/
+          tar -czf "dist/codex-package-${ver}-x86_64-apple-darwin.tar.gz" \
+            -C dist/codex-package .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: x86_64-apple-darwin
+          path: codex-rs/dist/

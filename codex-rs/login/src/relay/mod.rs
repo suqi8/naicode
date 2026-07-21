@@ -292,7 +292,6 @@ pub async fn relay_commit_group_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use tempfile::TempDir;
 
     fn make_temp_codex_home() -> TempDir {

@@ -1783,6 +1783,33 @@ impl App {
                     }
                 }
             }
+            AppEvent::PersistRelayAutoSelection { enabled } => {
+                let edit = crate::config_update::replace_config_value(
+                    "relay.auto_select_lowest_ratio",
+                    serde_json::json!(enabled),
+                );
+                match crate::config_update::write_config_batch(
+                    app_server.request_handle(),
+                    vec![edit],
+                )
+                .await
+                {
+                    Ok(_) => {
+                        self.chat_widget.add_info_message(
+                            format!(
+                                "Relay 自动最低倍率模式已{}",
+                                if enabled { "开启" } else { "关闭" }
+                            ),
+                            /*hint*/ None,
+                        );
+                    }
+                    Err(err) => {
+                        tracing::error!(error = %err, "failed to persist Relay auto selection");
+                        self.chat_widget
+                            .add_error_message(format!("保存 Relay 自动模式失败：{err}"));
+                    }
+                }
+            }
             AppEvent::UpdateAskForApprovalPolicy(policy) => {
                 let mut config = self.config.clone();
                 if !self.try_set_approval_policy_on_config(

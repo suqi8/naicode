@@ -806,6 +806,11 @@ pub(crate) enum AppEvent {
         service_tier: Option<String>,
     },
 
+    /// Persist the Relay automatic lowest-ratio routing preference.
+    PersistRelayAutoSelection {
+        enabled: bool,
+    },
+
     /// Open the reasoning selection popup after picking a model.
     OpenReasoningPopup {
         model: ModelPreset,

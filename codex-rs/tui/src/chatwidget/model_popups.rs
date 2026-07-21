@@ -43,7 +43,18 @@ impl ChatWidget {
     /// 然后触发授权 catalog 拉取；数据到达后 picker 自动切换到 Ready 状态。
     pub(crate) fn open_relay_group_popup(&mut self) {
         let tx = self.app_event_tx.clone();
-        self.bottom_pane.show_relay_picker(tx.clone());
+        let auto_lowest_ratio = self
+            .config
+            .config_layer_stack
+            .effective_config()
+            .get("relay")
+            .and_then(toml::Value::as_table)
+            .and_then(|relay| relay.get("auto_select_lowest_ratio"))
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(true);
+        let initial_key = auto_lowest_ratio
+            .then(|| codex_login::relay::pricing::PICKER_POLICY_LOWEST_RATIO.to_string());
+        self.bottom_pane.show_relay_picker(tx.clone(), initial_key);
         self.request_redraw();
         let codex_home = self.config.codex_home.clone();
         tokio::spawn(async move {

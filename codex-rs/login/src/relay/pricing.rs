@@ -151,11 +151,18 @@ pub struct PricingModel {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GroupInfo {
+    /// Stable picker key. Real groups use `group:<name>`; virtual entries use
+    /// `type:` or `policy:` keys and are resolved before switching remotely.
+    pub key: String,
     pub name: String,
     pub desc: String,
     pub ratio: Option<GroupRatio>,
     pub ratio_conflict: bool,
 }
+
+pub const PICKER_POLICY_LOWEST_PRICE: &str = "policy:lowest-price";
+pub const PICKER_POLICY_LOWEST_RATIO: &str = "policy:lowest-ratio";
+pub const PICKER_POLICY_HIGHEST_RATIO: &str = "policy:highest-ratio";
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RelayPricing {
@@ -210,6 +217,7 @@ impl RelayPricing {
                     .iter()
                     .any(|model_ratio| ratio.as_ref() != Some(model_ratio));
                 GroupInfo {
+                    key: format!("group:{name}"),
                     ratio: if ratio_conflict { None } else { ratio },
                     ratio_conflict,
                     desc: self.usable_group.get(&name).cloned().unwrap_or_default(),
@@ -235,6 +243,174 @@ impl RelayPricing {
         group: &str,
     ) -> Option<&'a EffectivePrice> {
         model.effective_prices.get(group)
+    }
+
+    /// Entries shown in the model picker. The virtual entries provide the
+    /// same high-level choices as the dynamic API model plaza while retaining
+    /// real group entries for users who need exact control.
+    pub fn picker_groups(&self) -> Vec<GroupInfo> {
+        let mut entries = vec![
+            GroupInfo {
+                key: PICKER_POLICY_LOWEST_PRICE.to_string(),
+                name: "最低价格".to_string(),
+                desc: "每个模型自动使用最低价格分组".to_string(),
+                ratio: None,
+                ratio_conflict: false,
+            },
+            GroupInfo {
+                key: PICKER_POLICY_LOWEST_RATIO.to_string(),
+                name: "最低倍率".to_string(),
+                desc: "优先选择倍率最低的可用分组".to_string(),
+                ratio: None,
+                ratio_conflict: false,
+            },
+            GroupInfo {
+                key: PICKER_POLICY_HIGHEST_RATIO.to_string(),
+                name: "最高倍率".to_string(),
+                desc: "优先选择倍率最高的可用分组".to_string(),
+                ratio: None,
+                ratio_conflict: false,
+            },
+        ];
+
+        let mut families = self
+            .models
+            .iter()
+            .map(|model| model_family(&model.model_name))
+            .collect::<Vec<_>>();
+        families.sort_unstable();
+        families.dedup();
+        for family in families {
+            let key = format!("type:{family}");
+            entries.push(GroupInfo {
+                key,
+                name: family.to_string(),
+                desc: "按模型类型筛选".to_string(),
+                ratio: None,
+                ratio_conflict: false,
+            });
+        }
+
+        entries.extend(self.groups().into_iter().map(|mut group| {
+            group.name = format!("分组 · {}", group.name);
+            group
+        }));
+        entries
+    }
+
+    /// Returns models and the real group that should be used for each model
+    /// under a picker entry.
+    pub fn picker_models<'a>(&'a self, key: &str) -> Vec<PricingModelChoice<'a>> {
+        let (family, policy) = if let Some(family) = key.strip_prefix("type:") {
+            (Some(family), PICKER_POLICY_LOWEST_PRICE)
+        } else {
+            (None, key)
+        };
+        let explicit_group = key
+            .strip_prefix("group:")
+            .or_else(|| key.strip_prefix("分组 · "));
+
+        let mut choices = self
+            .models
+            .iter()
+            .filter(|model| family.is_none_or(|family| model_family(&model.model_name) == family))
+            .filter_map(|model| {
+                let group = explicit_group
+                    .map(str::to_string)
+                    .or_else(|| self.best_group_for_model(model, policy))?;
+                if !model.effective_prices.contains_key(&group)
+                    && !model
+                        .enable_groups
+                        .iter()
+                        .any(|candidate| candidate == &group)
+                {
+                    return None;
+                }
+                Some(PricingModelChoice { model, group })
+            })
+            .collect::<Vec<_>>();
+        choices.sort_by(|a, b| a.model.model_name.cmp(&b.model.model_name));
+        choices
+    }
+
+    fn best_group_for_model(&self, model: &PricingModel, policy: &str) -> Option<String> {
+        let candidates = model
+            .effective_prices
+            .iter()
+            .filter(|(_, price)| price.input.is_some() || price.output.is_some());
+        let best = candidates
+            .min_by(|(a_group, a_price), (b_group, b_price)| {
+                let a_ratio = self
+                    .group_ratio
+                    .get(*a_group)
+                    .or(a_price.group_ratio.as_ref())
+                    .map_or(f64::INFINITY, GroupRatio::numeric);
+                let b_ratio = self
+                    .group_ratio
+                    .get(*b_group)
+                    .or(b_price.group_ratio.as_ref())
+                    .map_or(f64::INFINITY, GroupRatio::numeric);
+                let a_cost = a_price.input.unwrap_or(f64::INFINITY) + a_price.output.unwrap_or(0.0);
+                let b_cost = b_price.input.unwrap_or(f64::INFINITY) + b_price.output.unwrap_or(0.0);
+                let ordering = match policy {
+                    PICKER_POLICY_HIGHEST_RATIO => b_ratio.partial_cmp(&a_ratio),
+                    PICKER_POLICY_LOWEST_RATIO => a_ratio.partial_cmp(&b_ratio),
+                    _ => a_cost.partial_cmp(&b_cost),
+                };
+                ordering
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a_group.cmp(b_group))
+            })
+            .map(|(group, _)| group.clone());
+        best.or_else(|| {
+            model
+                .enable_groups
+                .iter()
+                .min_by(|a, b| {
+                    let a_ratio = self
+                        .group_ratio
+                        .get(*a)
+                        .map_or(f64::INFINITY, GroupRatio::numeric);
+                    let b_ratio = self
+                        .group_ratio
+                        .get(*b)
+                        .map_or(f64::INFINITY, GroupRatio::numeric);
+                    let ordering = match policy {
+                        PICKER_POLICY_HIGHEST_RATIO => b_ratio.partial_cmp(&a_ratio),
+                        _ => a_ratio.partial_cmp(&b_ratio),
+                    };
+                    ordering
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then_with(|| a.cmp(b))
+                })
+                .cloned()
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PricingModelChoice<'a> {
+    pub model: &'a PricingModel,
+    pub group: String,
+}
+
+pub fn model_family(model_name: &str) -> &'static str {
+    let name = model_name.to_ascii_lowercase();
+    if name.starts_with("gpt-")
+        || name.starts_with("gpt_")
+        || name.starts_with("o1")
+        || name.starts_with("o3")
+        || name.starts_with("o4")
+        || name.starts_with("chatgpt")
+        || name.starts_with("codex")
+    {
+        "OpenAI"
+    } else if name.starts_with("claude") {
+        "Anthropic"
+    } else if name.starts_with("gemini") || name.starts_with("gemma") {
+        "Google"
+    } else {
+        "Other"
     }
 }
 
@@ -481,5 +657,48 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(pricing.groups()[0].name, "oauth-only");
+    }
+
+    #[test]
+    fn picker_policies_resolve_real_groups_and_model_families() {
+        let pricing = RelayPricing {
+            group_ratio: HashMap::from([
+                ("cheap".to_string(), GroupRatio::from(0.5)),
+                ("fast".to_string(), GroupRatio::from(2.0)),
+            ]),
+            models: vec![PricingModel {
+                model_name: "gpt-test".to_string(),
+                enable_groups: vec!["cheap".to_string(), "fast".to_string()],
+                effective_prices: HashMap::from([
+                    (
+                        "cheap".to_string(),
+                        EffectivePrice {
+                            input: Some(1.0),
+                            output: Some(1.0),
+                            ..Default::default()
+                        },
+                    ),
+                    (
+                        "fast".to_string(),
+                        EffectivePrice {
+                            input: Some(2.0),
+                            output: Some(2.0),
+                            ..Default::default()
+                        },
+                    ),
+                ]),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let lowest = pricing.picker_models(PICKER_POLICY_LOWEST_RATIO);
+        assert_eq!(lowest[0].group, "cheap");
+        assert_eq!(pricing.picker_models("type:OpenAI")[0].group, "cheap");
+        assert!(
+            pricing
+                .picker_groups()
+                .iter()
+                .any(|group| group.key == "group:cheap")
+        );
     }
 }

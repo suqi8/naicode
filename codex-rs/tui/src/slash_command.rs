@@ -13,6 +13,8 @@ pub enum SlashCommand {
     // DO NOT ALPHA-SORT! Enum order is presentation order in the popup, so
     // more frequently used commands should be listed first.
     Model,
+    #[strum(to_string = "config", serialize = "setting")]
+    Config,
     Ide,
     Permissions,
     Keymap,
@@ -116,6 +118,7 @@ impl SlashCommand {
             SlashCommand::Model => {
                 "选择模型：先选酸奶中转站分组，再选该分组内的模型（含倍率与价格）"
             }
+            SlashCommand::Config => "打开配置设置并切换 Relay 自动最低倍率模式",
             SlashCommand::Ide => "包含当前选中内容、已打开的文件以及来自 IDE 的其他上下文",
             SlashCommand::Personality => "为 naicode 选择一种沟通风格",
             SlashCommand::Plan => "切换到计划模式",
@@ -207,6 +210,7 @@ impl SlashCommand {
             SlashCommand::Diff
             | SlashCommand::Resume
             | SlashCommand::Model
+            | SlashCommand::Config
             | SlashCommand::Personality
             | SlashCommand::Permissions
             | SlashCommand::Copy
@@ -281,6 +285,12 @@ mod tests {
     fn pet_alias_parses_to_pets_command() {
         assert_eq!(SlashCommand::Pets.command(), "pets");
         assert_eq!(SlashCommand::from_str("pet"), Ok(SlashCommand::Pets));
+    }
+
+    #[test]
+    fn setting_alias_parses_to_config_command() {
+        assert_eq!(SlashCommand::from_str("setting"), Ok(SlashCommand::Config));
+        assert_eq!(SlashCommand::Config.command(), "config");
     }
 
     #[test]

@@ -257,6 +257,9 @@ impl ChatWidget {
                 // 直接进酸奶中转站的分组/模型二级选择器。
                 self.open_relay_group_popup();
             }
+            SlashCommand::Config => {
+                self.open_config_popup();
+            }
             SlashCommand::Personality => {
                 self.open_personality_popup();
                 self.defer_input_until_settings_applied();
@@ -1036,6 +1039,7 @@ impl ChatWidget {
             | SlashCommand::Compact
             | SlashCommand::Review
             | SlashCommand::Model
+            | SlashCommand::Config
             | SlashCommand::Personality
             | SlashCommand::Plan
             | SlashCommand::Goal

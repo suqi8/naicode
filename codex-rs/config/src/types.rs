@@ -51,6 +51,23 @@ pub const DEFAULT_MEMORIES_MIN_ROLLOUT_IDLE_HOURS: i64 = 6;
 pub const DEFAULT_MEMORIES_MIN_RATE_LIMIT_REMAINING_PERCENT: i64 = 25;
 pub const DEFAULT_MEMORIES_MAX_RAW_MEMORIES_FOR_CONSOLIDATION: usize = 256;
 pub const DEFAULT_MEMORIES_MAX_UNUSED_DAYS: i64 = 30;
+
+/// Relay model routing preferences. Optional fields preserve compatibility
+/// with existing config.toml files that predate Relay routing.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(deny_unknown_fields)]
+pub struct RelayToml {
+    /// Automatically choose the lowest-ratio available group for the active model.
+    pub auto_select_lowest_ratio: Option<bool>,
+}
+
+impl Default for RelayToml {
+    fn default() -> Self {
+        Self {
+            auto_select_lowest_ratio: Some(true),
+        }
+    }
+}
 const MIN_MEMORIES_MAX_RAW_MEMORIES_FOR_CONSOLIDATION: usize = 1;
 const MAX_MEMORIES_MAX_RAW_MEMORIES_FOR_CONSOLIDATION: usize = 4096;
 const MIN_MEMORIES_MAX_ROLLOUTS_PER_STARTUP: usize = 1;

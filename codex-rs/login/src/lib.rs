@@ -33,6 +33,7 @@ pub use relay::pricing::GroupInfo;
 pub use relay::pricing::GroupRatio;
 pub use relay::pricing::PricingDisplay;
 pub use relay::pricing::PricingModel;
+pub use relay::pricing::PricingModelChoice;
 pub use relay::pricing::RelayCatalogError;
 pub use relay::pricing::RelayPricing;
 pub use relay::pricing::fetch_pricing;
