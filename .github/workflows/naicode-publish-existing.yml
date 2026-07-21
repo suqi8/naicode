@@ -55,6 +55,7 @@ jobs:
           python3 scripts/stage_npm_packages.py \
             --release-version "$ver" \
             --artifacts-dir "${GITHUB_WORKSPACE}/dist" \
+            --workflow-url "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${{ inputs.source_run_id }}" \
             --package codex
 
       - name: Create GitHub Release if missing
