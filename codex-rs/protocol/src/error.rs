@@ -66,10 +66,10 @@ pub enum SandboxErr {
 
 #[derive(Error, Debug)]
 pub enum CodexErr {
-    #[error("turn aborted. Something went wrong? Hit `/feedback` to report the issue.")]
+    #[error("本次对话已中止，请尝试重新发送")]
     TurnAborted,
 
-    #[error("shared rollout token budget exhausted")]
+    #[error("共享 rollout token 预算已耗尽")]
     SessionBudgetExceeded,
 
     /// Returned by ResponsesClient when the SSE stream disconnects or errors out **after** the HTTP
@@ -78,10 +78,10 @@ pub enum CodexErr {
     /// The Session loop treats this as a transient error and will automatically retry the turn.
     ///
     /// Optionally includes the requested delay before retrying the turn.
-    #[error("stream disconnected before completion: {0}")]
+    #[error("流式请求中断：{0}")]
     Stream(String, Option<Duration>),
     #[error(
-        "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying."
+        "上下文窗口已满，请开启新对话或清除部分历史记录后重试"
     )]
     ContextWindowExceeded,
     #[error("no thread with id: {0}")]
@@ -93,7 +93,7 @@ pub enum CodexErr {
     /// Returned by run_command_stream when the spawned child process timed out (10s).
     #[error("timeout waiting for child process to exit")]
     Timeout,
-    #[error("request timed out")]
+    #[error("请求超时")]
     RequestTimeout,
     /// Returned by run_command_stream when the child could not be spawned (its stdout/stderr pipes
     /// could not be captured). Analogous to the previous `CodexError::Spawn` variant.
@@ -101,7 +101,7 @@ pub enum CodexErr {
     Spawn,
     /// Returned by run_command_stream when the user pressed Ctrl-C (SIGINT). Session uses this to
     /// surface a polite FunctionCallOutput back to the model instead of crashing the CLI.
-    #[error("interrupted (Ctrl-C). Something went wrong? Hit `/feedback` to report the issue.")]
+    #[error("已被 Ctrl-C 中断")]
     Interrupted,
     /// Unexpected HTTP status code.
     #[error("{0}")]
@@ -114,7 +114,7 @@ pub enum CodexErr {
     InvalidImageRequest(),
     #[error("{0}")]
     UsageLimitReached(UsageLimitReachedError),
-    #[error("Selected model is at capacity. Please try a different model.")]
+    #[error("所选模型已满负载，请换一个模型重试")]
     ServerOverloaded,
     #[error("{message}")]
     CyberPolicy { message: String },
@@ -122,13 +122,13 @@ pub enum CodexErr {
     ResponseStreamFailed(ResponseStreamFailed),
     #[error("{0}")]
     ConnectionFailed(ConnectionFailedError),
-    #[error("Quota exceeded. Check your plan and billing details.")]
+    #[error("额度已用尽，请检查套餐和账单信息")]
     QuotaExceeded,
     #[error(
         "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus."
     )]
     UsageNotIncluded,
-    #[error("We're currently experiencing high demand, which may cause temporary errors.")]
+    #[error("服务端当前负载较高，可能出现临时错误")]
     InternalServerError,
     /// Retry limit exceeded.
     #[error("{0}")]

@@ -498,6 +498,10 @@ async fn process_sse_with_treatment(
     let mut stream = stream.eventsource();
     let mut response_error: Option<ApiError> = None;
     let mut last_server_model: Option<String> = None;
+    // Track how many content events arrived so we can distinguish
+    // "server closed immediately" (auth / routing problem) from
+    // "server closed mid-generation" (upstream timeout / truncation).
+    let mut events_received: u32 = 0;
 
     loop {
         let start = Instant::now();
@@ -509,13 +513,30 @@ async fn process_sse_with_treatment(
             Ok(Some(Ok(sse))) => sse,
             Ok(Some(Err(e))) => {
                 debug!("SSE Error: {e:#}");
-                let _ = tx_event.send(Err(ApiError::Stream(e.to_string()))).await;
+                // Surface the real network-layer error rather than a generic label.
+                let msg = format!("网络层 SSE 错误：{e}");
+                let _ = tx_event.send(Err(ApiError::Stream(msg))).await;
                 return;
             }
             Ok(None) => {
-                let error = response_error.unwrap_or(ApiError::Stream(
-                    "stream closed before response.completed".into(),
-                ));
+                let error = response_error.unwrap_or_else(|| {
+                    // Report whether the server closed before or after sending
+                    // data: zero events points at auth/routing/upstream refusal,
+                    // a partial count points at an upstream timeout or a proxy
+                    // cutting the connection mid-generation. Keep this on one
+                    // line — it also travels in agent notification payloads.
+                    let detail = match (events_received, last_server_model.as_deref()) {
+                        (0, Some(m)) => {
+                            format!("服务器未返回任何内容即关闭连接（模型 {m}）")
+                        }
+                        (0, None) => "服务器未返回任何内容即关闭连接".to_string(),
+                        (n, Some(m)) => {
+                            format!("服务器已发送 {n} 个事件后提前关闭流（模型 {m}）")
+                        }
+                        (n, None) => format!("服务器已发送 {n} 个事件后提前关闭流"),
+                    };
+                    ApiError::Stream(detail)
+                });
                 let _ = tx_event.send(Err(error)).await;
                 return;
             }
@@ -579,6 +600,7 @@ async fn process_sse_with_treatment(
 
         match process_responses_event(event) {
             Ok(Some(event)) => {
+                events_received += 1;
                 let is_completed = matches!(event, ResponseEvent::Completed { .. });
                 if tx_event.send(Ok(event)).await.is_err() {
                     return;
@@ -853,7 +875,16 @@ mod tests {
 
         match &events[1] {
             Err(ApiError::Stream(msg)) => {
-                assert_eq!(msg, "stream closed before response.completed")
+                // The message now reports how many events arrived before the
+                // close so the cause can be told apart from an empty response.
+                assert!(
+                    msg.contains("提前关闭流"),
+                    "expected premature-close diagnostics, got: {msg}"
+                );
+                assert!(
+                    msg.contains("1 个事件"),
+                    "expected the received-event count, got: {msg}"
+                );
             }
             other => panic!("unexpected second event: {other:?}"),
         }

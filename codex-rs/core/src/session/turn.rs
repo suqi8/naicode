@@ -2031,7 +2031,7 @@ async fn try_run_sampling_request(
             Some(Err(err)) => break Err(err),
             None => {
                 break Err(CodexErr::Stream(
-                    "stream closed before response.completed".into(),
+                    "服务器提前关闭流，未收到完成事件".into(),
                     None,
                 ));
             }

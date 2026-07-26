@@ -8,28 +8,28 @@ use thiserror::Error;
 pub enum ApiError {
     #[error(transparent)]
     Transport(#[from] TransportError),
-    #[error("api error {status}: {message}")]
+    #[error("接口返回错误 {status}：{message}")]
     Api { status: StatusCode, message: String },
-    #[error("stream error: {0}")]
+    #[error("{0}")]
     Stream(String),
-    #[error("context window exceeded")]
+    #[error("上下文窗口已超出上限")]
     ContextWindowExceeded,
-    #[error("quota exceeded")]
+    #[error("额度已用尽")]
     QuotaExceeded,
-    #[error("usage not included")]
+    #[error("当前套餐不含此用量")]
     UsageNotIncluded,
-    #[error("retryable error: {message}")]
+    #[error("可重试错误：{message}")]
     Retryable {
         message: String,
         delay: Option<Duration>,
     },
-    #[error("rate limit: {0}")]
+    #[error("触发限流：{0}")]
     RateLimit(String),
-    #[error("invalid request: {message}")]
+    #[error("请求无效：{message}")]
     InvalidRequest { message: String },
-    #[error("cyber policy: {message}")]
+    #[error("内容安全策略拦截：{message}")]
     CyberPolicy { message: String },
-    #[error("server overloaded")]
+    #[error("服务端已过载")]
     ServerOverloaded,
 }
 

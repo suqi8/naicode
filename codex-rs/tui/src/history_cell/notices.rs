@@ -28,7 +28,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
         } else {
             line![
                 "访问 ",
-                "https://github.com/openai/codex".cyan().underlined(),
+                "https://github.com/suqi8/naicode".cyan().underlined(),
                 " 查看安装方式。"
             ]
         };
@@ -43,7 +43,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             update_instruction,
             "",
             "查看完整发行说明：",
-            "https://github.com/openai/codex/releases/latest"
+            "https://github.com/suqi8/naicode/releases/latest"
                 .cyan()
                 .underlined(),
         ];
@@ -60,7 +60,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
         let update_instruction = if let Some(update_action) = self.update_action {
             format!("运行 {} 进行更新。", update_action.command_str())
         } else {
-            "访问 https://github.com/openai/codex 查看安装方式。".to_string()
+            "访问 https://github.com/suqi8/naicode 查看安装方式。".to_string()
         };
         vec![
             Line::from("有可用更新！"),
@@ -68,7 +68,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             Line::from(update_instruction),
             Line::from(""),
             Line::from("查看完整发行说明："),
-            Line::from("https://github.com/openai/codex/releases/latest"),
+            Line::from("https://github.com/suqi8/naicode/releases/latest"),
         ]
     }
 

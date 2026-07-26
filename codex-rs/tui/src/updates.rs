@@ -53,32 +53,21 @@ pub fn get_upgrade_version(config: &Config) -> Option<String> {
     })
 }
 
-// We use the latest version from the cask if installation is via homebrew - homebrew does not immediately pick up the latest release and can lag behind.
-const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
+// Served by nginx on snai.cc.cd, which proxies the GitHub API. Going through the
+// proxy keeps clients off the anonymous GitHub rate limit (60 req/hour per IP)
+// and is reachable from networks where api.github.com is not.
+const LATEST_RELEASE_URL: &str = "https://snai.cc.cd/api/releases/latest";
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
     tag_name: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
-struct HomebrewCaskInfo {
-    version: String,
-}
-
 async fn check_for_update(version_file: &Path, action: Option<UpdateAction>) -> anyhow::Result<()> {
     let latest_version = match action {
-        Some(UpdateAction::BrewUpgrade) => {
-            let HomebrewCaskInfo { version } = create_client()
-                .get(HOMEBREW_CASK_API_URL)
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<HomebrewCaskInfo>()
-                .await?;
-            version
-        }
+        // For package-manager installs, only trust the release once the matching
+        // npm version is actually installable, so we never advertise a version
+        // that `npm install -g naicode` cannot resolve yet.
         Some(UpdateAction::NpmGlobalLatest)
         | Some(UpdateAction::BunGlobalLatest)
         | Some(UpdateAction::PnpmGlobalLatest) => {
@@ -93,6 +82,8 @@ async fn check_for_update(version_file: &Path, action: Option<UpdateAction>) -> 
             npm_registry::ensure_version_ready(&package_info, &latest_version)?;
             latest_version
         }
+        // Standalone installs pull tarballs straight from the release, so the
+        // release itself is the only gate.
         Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
             fetch_latest_github_release_version().await?
         }

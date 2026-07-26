@@ -683,7 +683,7 @@ async fn drain_to_completed(
         let maybe_event = stream.next().await;
         let Some(event) = maybe_event else {
             return Err(CodexErr::Stream(
-                "stream closed before response.completed".into(),
+                "压缩历史记录时服务器提前关闭流".into(),
                 None,
             ));
         };

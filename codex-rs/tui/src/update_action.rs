@@ -2,23 +2,23 @@
 use codex_install_context::InstallContext;
 #[cfg(any(not(debug_assertions), test))]
 use codex_install_context::InstallMethod;
-#[cfg(any(not(debug_assertions), test))]
-use codex_install_context::StandalonePlatform;
 
 /// Update action the CLI should perform after the TUI exits.
+///
+/// NaiCode has no Homebrew cask, so `InstallMethod::Brew` intentionally maps to
+/// no action rather than running `brew upgrade`, which would pull upstream Codex
+/// and replace the running install with a different product.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateAction {
-    /// Update via `npm install -g @openai/codex@latest`.
+    /// Update via `npm install -g naicode@latest`.
     NpmGlobalLatest,
-    /// Update via `bun install -g @openai/codex@latest`.
+    /// Update via `bun install -g naicode@latest`.
     BunGlobalLatest,
-    /// Update via `pnpm add -g @openai/codex@latest`.
+    /// Update via `pnpm add -g naicode@latest`.
     PnpmGlobalLatest,
-    /// Update via `brew upgrade codex`.
-    BrewUpgrade,
-    /// Update via `curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh`.
+    /// Update by re-running the standalone installer from <https://snai.cc.cd/i.sh>.
     StandaloneUnix,
-    /// Update via `$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex`.
+    /// Update by re-running the standalone installer from <https://snai.cc.cd/i.ps1>.
     StandaloneWindows,
 }
 
@@ -29,28 +29,25 @@ impl UpdateAction {
             InstallMethod::Npm => Some(UpdateAction::NpmGlobalLatest),
             InstallMethod::Bun => Some(UpdateAction::BunGlobalLatest),
             InstallMethod::Pnpm => Some(UpdateAction::PnpmGlobalLatest),
-            InstallMethod::Brew => Some(UpdateAction::BrewUpgrade),
             InstallMethod::Standalone { platform, .. } => Some(match platform {
                 StandalonePlatform::Unix => UpdateAction::StandaloneUnix,
                 StandalonePlatform::Windows => UpdateAction::StandaloneWindows,
             }),
-            InstallMethod::Other => None,
+            // NaiCode has no Homebrew cask — running `brew upgrade` would pull
+            // upstream Codex and replace this install.
+            InstallMethod::Brew | InstallMethod::Other => None,
         }
     }
 
     /// Returns the list of command-line arguments for invoking the update.
     pub fn command_args(self) -> (&'static str, &'static [&'static str]) {
         match self {
-            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "@openai/codex"]),
-            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "@openai/codex"]),
-            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "@openai/codex"]),
-            UpdateAction::BrewUpgrade => ("brew", &["upgrade", "--cask", "codex"]),
+            UpdateAction::NpmGlobalLatest => ("npm", &["install", "-g", "naicode"]),
+            UpdateAction::BunGlobalLatest => ("bun", &["install", "-g", "naicode"]),
+            UpdateAction::PnpmGlobalLatest => ("pnpm", &["add", "-g", "naicode"]),
             UpdateAction::StandaloneUnix => (
                 "sh",
-                &[
-                    "-c",
-                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh",
-                ],
+                &["-c", "curl -fsSL https://snai.cc.cd/i.sh | CODEX_NON_INTERACTIVE=1 sh"],
             ),
             UpdateAction::StandaloneWindows => (
                 "powershell",
@@ -58,7 +55,7 @@ impl UpdateAction {
                     "-ExecutionPolicy",
                     "Bypass",
                     "-c",
-                    "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex",
+                    "$env:CODEX_NON_INTERACTIVE=1; irm https://snai.cc.cd/i.ps1 | iex",
                 ],
             ),
         }
@@ -80,6 +77,7 @@ pub fn get_update_action() -> Option<UpdateAction> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_install_context::StandalonePlatform;
     use codex_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
 
@@ -117,12 +115,13 @@ mod tests {
             }),
             Some(UpdateAction::PnpmGlobalLatest)
         );
+        // NaiCode has no Homebrew cask — must not run brew upgrade.
         assert_eq!(
             UpdateAction::from_install_context(&InstallContext {
                 method: InstallMethod::Brew,
                 package_layout: None,
             }),
-            Some(UpdateAction::BrewUpgrade)
+            None
         );
         assert_eq!(
             UpdateAction::from_install_context(&InstallContext {
@@ -149,15 +148,28 @@ mod tests {
     }
 
     #[test]
-    fn standalone_update_commands_rerun_latest_installer() {
+    fn update_commands_target_naicode() {
+        assert_eq!(
+            UpdateAction::NpmGlobalLatest.command_args(),
+            ("npm", &["install", "-g", "naicode"][..]),
+        );
+        assert_eq!(
+            UpdateAction::BunGlobalLatest.command_args(),
+            ("bun", &["install", "-g", "naicode"][..]),
+        );
+        assert_eq!(
+            UpdateAction::PnpmGlobalLatest.command_args(),
+            ("pnpm", &["add", "-g", "naicode"][..]),
+        );
+        assert_eq!(
+            UpdateAction::NpmGlobalLatest.command_str(),
+            "npm install -g naicode"
+        );
         assert_eq!(
             UpdateAction::StandaloneUnix.command_args(),
             (
                 "sh",
-                &[
-                    "-c",
-                    "curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh"
-                ][..],
+                &["-c", "curl -fsSL https://snai.cc.cd/i.sh | CODEX_NON_INTERACTIVE=1 sh"][..],
             )
         );
         assert_eq!(
@@ -168,7 +180,7 @@ mod tests {
                     "-ExecutionPolicy",
                     "Bypass",
                     "-c",
-                    "$env:CODEX_NON_INTERACTIVE=1; irm https://chatgpt.com/codex/install.ps1 | iex"
+                    "$env:CODEX_NON_INTERACTIVE=1; irm https://snai.cc.cd/i.ps1 | iex",
                 ][..],
             )
         );

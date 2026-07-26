@@ -66,6 +66,28 @@ jobs:
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
             gh release create "$RELEASE_TAG" --generate-notes
 
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          version="${RELEASE_TAG#rust-v}"
+          # platform binaries (one tar.gz per target, lives in a subdirectory named after the artifact)
+          shopt -s nullglob
+          platform_tarballs=(dist/*/codex-package-*.tar.gz)
+          npm_tarballs=(
+            "dist/npm/codex-npm-${version}.tgz"
+            dist/npm/codex-npm-darwin-*.tgz
+            dist/npm/codex-npm-linux-*.tgz
+            dist/npm/codex-npm-win32-*.tgz
+          )
+          all_files=("${platform_tarballs[@]}" "${npm_tarballs[@]}")
+          if [ "${#all_files[@]}" -gt 0 ]; then
+            gh release upload "$RELEASE_TAG" "${all_files[@]}" --clobber
+          else
+            echo "Warning: no release assets found to upload"
+          fi
+
       - name: Publish to npm
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

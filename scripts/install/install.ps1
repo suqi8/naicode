@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$Release = $env:CODEX_RELEASE
+    [string]$Release = $env:NAICODE_RELEASE,
+    [string]$BaseUrl = $env:NAICODE_BASE_URL
 )
 
 Set-StrictMode -Version Latest
@@ -8,10 +9,14 @@ $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
 if ([string]::IsNullOrWhiteSpace($Release)) {
-    $Release = "latest"
+    $Release = if ($env:CODEX_RELEASE) { $env:CODEX_RELEASE } else { "latest" }
+}
+if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+    $BaseUrl = "https://snai.cc.cd"
 }
 
-$NonInteractive = $env:CODEX_NON_INTERACTIVE -match "^(?i:1|true|yes)$"
+$NonInteractive = ($env:NAICODE_NON_INTERACTIVE -match "^(?i:1|true|yes)$") -or
+                  ($env:CODEX_NON_INTERACTIVE   -match "^(?i:1|true|yes)$")
 
 function Write-Step {
     param(
@@ -124,7 +129,7 @@ function Get-PackageArchiveDigest {
         }
     }
 
-    throw "Could not find SHA-256 digest for $AssetName in codex-package_SHA256SUMS."
+    throw "在 release 元数据中找不到文件 $AssetName 的 SHA-256 校验值。"
 }
 
 function Path-Contains {
@@ -207,11 +212,11 @@ function Resolve-Release {
 
     if ($normalizedVersion -eq "latest") {
         $requestedRelease = "latest"
-        $metadataUri = "https://api.github.com/repos/openai/codex/releases/latest"
+        $metadataUri = "$BaseUrl/api/releases/latest"
     } else {
         $resolvedVersion = $normalizedVersion
         $requestedRelease = $resolvedVersion
-        $metadataUri = "https://api.github.com/repos/openai/codex/releases/tags/rust-v$resolvedVersion"
+        $metadataUri = "$BaseUrl/api/releases/tags/rust-v$resolvedVersion"
     }
 
     try {
@@ -262,12 +267,12 @@ function Get-CurrentInstalledVersion {
         [string]$StandaloneCurrentDir
     )
 
-    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "bin\codex.exe")
+    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "bin\naicode.exe")
     if (-not [string]::IsNullOrWhiteSpace($standaloneVersion)) {
         return $standaloneVersion
     }
 
-    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "codex.exe")
+    $standaloneVersion = Get-VersionFromBinary -CodexPath (Join-Path $StandaloneCurrentDir "naicode.exe")
     if (-not [string]::IsNullOrWhiteSpace($standaloneVersion)) {
         return $standaloneVersion
     }
@@ -293,7 +298,8 @@ function Test-OldStandaloneBinLayout {
         return $false
     }
 
-    $requiredFiles = @("codex.exe", "rg.exe")
+    # NaiCode packages ship only the main executable; ripgrep is not bundled.
+    $requiredFiles = @("naicode.exe")
     foreach ($fileName in $requiredFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $VisibleBinDir $fileName) -PathType Leaf)) {
             return $false
@@ -301,7 +307,8 @@ function Test-OldStandaloneBinLayout {
     }
 
     $knownFiles = @(
-        "codex.exe",
+        "naicode.exe",
+        "naicode-code-mode-host.exe",
         "rg.exe",
         "codex-command-runner.exe",
         "codex-windows-sandbox.exe",
@@ -535,13 +542,11 @@ function Test-PackageContentsAreComplete {
         return $false
     }
 
+    # Only the main executable is guaranteed. NaiCode packages carry no manifest,
+    # no bundled ripgrep, and no sandbox helpers, so requiring them here would
+    # make every install look incomplete and re-download on each run.
     $expectedFiles = @(
-        "codex-package.json",
-        "bin\codex.exe",
-        "bin\codex-code-mode-host.exe",
-        "codex-path\rg.exe",
-        "codex-resources\codex-command-runner.exe",
-        "codex-resources\codex-windows-sandbox-setup.exe"
+        "bin\naicode.exe"
     )
     foreach ($name in $expectedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $PackageDir $name) -PathType Leaf)) {
@@ -562,10 +567,7 @@ function Test-LegacyPlatformNpmContentsAreComplete {
     }
 
     $expectedFiles = @(
-        "codex.exe",
-        "codex-resources\codex-command-runner.exe",
-        "codex-resources\codex-windows-sandbox-setup.exe",
-        "codex-resources\rg.exe"
+        "naicode.exe"
     )
     foreach ($name in $expectedFiles) {
         if (-not (Test-Path -LiteralPath (Join-Path $PackageDir $name) -PathType Leaf)) {
@@ -669,13 +671,13 @@ function Maybe-HandleConflictingInstall {
     $manager = $Conflict.Manager
 
     $uninstallArgs = if ($manager -eq "bun") {
-        @("remove", "-g", "@openai/codex")
+        @("remove", "-g", "naicode")
     } else {
-        @("uninstall", "-g", "@openai/codex")
+        @("uninstall", "-g", "naicode")
     }
     $uninstallCommand = if ($manager -eq "bun") { "bun" } else { "npm" }
 
-    if (Prompt-YesNo "Uninstall the existing $manager-managed Codex now?") {
+    if (Prompt-YesNo "是否现在卸载已有的 $manager 版 NaiCode？") {
         Write-Step "Running: $uninstallCommand $($uninstallArgs -join ' ')"
         try {
             & $uninstallCommand @uninstallArgs
@@ -692,7 +694,7 @@ function Test-VisibleCodexCommand {
         [string]$VisibleBinDir
     )
 
-    $codexCommand = Join-Path $VisibleBinDir "codex.exe"
+    $codexCommand = Join-Path $VisibleBinDir "naicode.exe"
     & $codexCommand --version *> $null
     if ($LASTEXITCODE -ne 0) {
         throw "Installed Codex command failed verification: $codexCommand --version"
@@ -740,7 +742,7 @@ $releasesDir = Join-Path $standaloneRoot "releases"
 $currentDir = Join-Path $standaloneRoot "current"
 $lockPath = Join-Path $standaloneRoot "install.lock"
 
-$defaultVisibleBinDir = Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Codex\bin"
+$defaultVisibleBinDir = Join-Path $env:LOCALAPPDATA "Programs\NaiCode\bin"
 if ([string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
     $visibleBinDir = $defaultVisibleBinDir
 } else {
@@ -755,11 +757,11 @@ $releaseName = "$resolvedVersion-$target"
 $releaseDir = Join-Path $releasesDir $releaseName
 
 if (-not [string]::IsNullOrWhiteSpace($currentVersion) -and $currentVersion -ne $resolvedVersion) {
-    Write-Step "Updating Codex CLI from $currentVersion to $resolvedVersion"
+    Write-Step "将 NaiCode 从 $currentVersion 更新到 $resolvedVersion"
 } elseif (-not [string]::IsNullOrWhiteSpace($currentVersion)) {
-    Write-Step "Updating Codex CLI"
+    Write-Step "更新 NaiCode"
 } else {
-    Write-Step "Installing Codex CLI"
+    Write-Step "安装 NaiCode"
 }
 Write-Step "Detected platform: $platformLabel"
 Write-Step "Resolved version: $resolvedVersion"
@@ -767,20 +769,19 @@ Write-Step "Resolved version: $resolvedVersion"
 $conflictingInstall = Get-ConflictingInstall -VisibleBinDir $visibleBinDir
 $oldStandaloneBackup = $null
 
-$packageAsset = "codex-package-$target.tar.gz"
-$checksumAsset = "codex-package_SHA256SUMS"
+# NaiCode releases embed the version in the package name and ship no
+# SHA256SUMS manifest, so the per-asset digest is the only checksum source.
+$packageAsset = "codex-package-$resolvedVersion-$target.tar.gz"
 $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ReleaseMetadata $releaseMetadata
-$checksumMetadata = Find-ReleaseAssetMetadata -AssetName $checksumAsset -ReleaseMetadata $releaseMetadata
 $installLayout = "Package"
-if ($null -eq $packageMetadata -or $null -eq $checksumMetadata) {
+if ($null -eq $packageMetadata) {
     $packageAsset = "codex-npm-$npmTag-$resolvedVersion.tgz"
     $packageMetadata = Find-ReleaseAssetMetadata -AssetName $packageAsset -ReleaseMetadata $releaseMetadata
     if ($null -ne $packageMetadata) {
         $installLayout = "LegacyPlatformNpm"
     } else {
-        throw "Could not find Codex package or platform npm release assets for Codex $resolvedVersion."
+        throw "找不到 NaiCode $resolvedVersion 对应 $target 平台的安装包。请查看 https://github.com/suqi8/naicode/releases/tag/rust-v$resolvedVersion"
     }
-    $checksumMetadata = $null
 }
 $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-install-" + [System.Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
@@ -795,18 +796,12 @@ try {
             }
 
             $archivePath = Join-Path $tempDir $packageAsset
-            $checksumPath = Join-Path $tempDir $checksumAsset
             $stagingDir = Join-Path $releasesDir ".staging.$releaseName.$PID"
 
-            Write-Step "Downloading Codex CLI"
-            if ($installLayout -eq "Package") {
-                Invoke-WebRequest -Uri $checksumMetadata.Url -OutFile $checksumPath
-                Test-ArchiveDigest -ArchivePath $checksumPath -ExpectedDigest $checksumMetadata.Sha256
-                $expectedPackageDigest = Get-PackageArchiveDigest -ManifestPath $checksumPath -AssetName $packageAsset
-            } else {
-                $expectedPackageDigest = $packageMetadata.Sha256
-            }
+            Write-Step "正在下载 NaiCode（约 330MB，请耐心等待）"
+            $expectedPackageDigest = $packageMetadata.Sha256
             Invoke-WebRequest -Uri $packageMetadata.Url -OutFile $archivePath
+            Write-Step "正在校验下载文件"
             Test-ArchiveDigest -ArchivePath $archivePath -ExpectedDigest $expectedPackageDigest
 
             New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
@@ -817,7 +812,7 @@ try {
             if ($installLayout -eq "Package") {
                 tar -xzf $archivePath -C $stagingDir
                 if (-not (Test-PackageContentsAreComplete -PackageDir $stagingDir)) {
-                    throw "Downloaded Codex package archive did not contain the expected package layout."
+                    throw "下载的 NaiCode 安装包结构不完整，请重试。"
                 }
             } else {
                 $extractDir = Join-Path $tempDir "extract"
@@ -827,11 +822,29 @@ try {
                 $vendorRoot = Join-Path $extractDir "package/vendor/$target"
                 $resourcesDir = Join-Path $stagingDir "codex-resources"
                 New-Item -ItemType Directory -Force -Path $resourcesDir | Out-Null
-                $copyMap = @{
-                    "codex/codex.exe" = "codex.exe"
-                    "codex/codex-command-runner.exe" = "codex-resources\codex-command-runner.exe"
-                    "codex/codex-windows-sandbox-setup.exe" = "codex-resources\codex-windows-sandbox-setup.exe"
-                    "path/rg.exe" = "codex-resources\rg.exe"
+                # The platform npm package keeps the executable under
+                # vendor/<target>/bin, matching what bin/codex.js resolves.
+                # Fall back to the upstream layout for older packages.
+                $copyMap = @{}
+                if (Test-Path -LiteralPath (Join-Path $vendorRoot "bin\naicode.exe")) {
+                    $copyMap["bin\naicode.exe"] = "naicode.exe"
+                    if (Test-Path -LiteralPath (Join-Path $vendorRoot "bin\naicode-code-mode-host.exe")) {
+                        $copyMap["bin\naicode-code-mode-host.exe"] = "naicode-code-mode-host.exe"
+                    }
+                } elseif (Test-Path -LiteralPath (Join-Path $vendorRoot "codex\codex.exe")) {
+                    $copyMap["codex\codex.exe"] = "naicode.exe"
+                } else {
+                    throw "在平台 npm 包中找不到 naicode 可执行文件。"
+                }
+                # Optional extras: copy only when the package actually ships them.
+                foreach ($optional in @(
+                    @("path\rg.exe", "codex-resources\rg.exe"),
+                    @("codex\codex-command-runner.exe", "codex-resources\codex-command-runner.exe"),
+                    @("codex\codex-windows-sandbox-setup.exe", "codex-resources\codex-windows-sandbox-setup.exe")
+                )) {
+                    if (Test-Path -LiteralPath (Join-Path $vendorRoot $optional[0])) {
+                        $copyMap[$optional[0]] = $optional[1]
+                    }
                 }
 
                 foreach ($relativeSource in $copyMap.Keys) {
@@ -839,7 +852,7 @@ try {
                 }
 
                 if (-not (Test-LegacyPlatformNpmContentsAreComplete -PackageDir $stagingDir)) {
-                    throw "Downloaded Codex npm archive did not contain the expected legacy platform package layout."
+                    throw "下载的 npm 包结构不完整，请重试。"
                 }
             }
 
@@ -917,12 +930,12 @@ if ($prioritizeVisibleBin) {
     }
 }
 
-Write-Step "Current PowerShell session: codex"
-Write-Step "Future PowerShell windows: open a new PowerShell window and run: codex"
-Write-Host "Codex CLI $resolvedVersion installed successfully."
+Write-Step "当前 PowerShell 会话：naicode"
+Write-Step "以后：新开一个 PowerShell 窗口，直接运行 naicode"
+Write-Host "NaiCode $resolvedVersion 安装成功。"
 
-$codexCommand = Join-Path $visibleBinDir "codex.exe"
-if (Prompt-YesNo "Start Codex now?") {
-    Write-Step "Launching Codex"
+$codexCommand = Join-Path $visibleBinDir "naicode.exe"
+if (Prompt-YesNo "现在启动 NaiCode 吗？") {
+    Write-Step "正在启动 NaiCode"
     & $codexCommand
 }

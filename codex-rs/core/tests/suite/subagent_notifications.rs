@@ -1251,7 +1251,9 @@ async fn plaintext_multi_agent_v2_completion_sends_agent_message(
         ]),
     )
     .await;
-    let error = "stream disconnected before completion: stream closed before response.completed";
+    // The child stream sends only response.created, then closes without
+    // response.completed — one event received, no server model reported.
+    let error = "流式请求中断：服务器已发送 1 个事件后提前关闭流";
     let (payload, expected_text) = match scenario {
         CompletionScenario::Completed => ("child done".to_string(), "child done"),
         CompletionScenario::TerminalError => (

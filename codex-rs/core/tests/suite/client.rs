@@ -3510,7 +3510,7 @@ async fn incomplete_response_emits_content_filter_error_message() -> anyhow::Res
             error_event,
             EventMsg::Error(ref err)
                 if err.message
-                    == "stream disconnected before completion: Incomplete response returned, reason: content_filter"
+                    == "流式请求中断：Incomplete response returned, reason: content_filter"
         ),
         "expected incomplete content filter error; got {error_event:?}"
     );

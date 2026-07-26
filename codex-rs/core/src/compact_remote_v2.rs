@@ -407,7 +407,7 @@ async fn collect_compaction_output(
 
     if !saw_completed {
         return Err(CodexErr::Stream(
-            "remote compaction v2 stream closed before response.completed".to_string(),
+            "远端压缩（v2）时服务器提前关闭流".to_string(),
             None,
         ));
     }
