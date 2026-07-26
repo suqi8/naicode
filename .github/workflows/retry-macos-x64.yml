@@ -8,6 +8,11 @@ on:
         required: true
         default: "rust-v1.1.8085"
 
+env:
+  # Same workaround as naicode-release.yml: cargo's SecureTransport git fetch
+  # flakes on chromium.googlesource.com; the git CLI retries these fine.
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+
 jobs:
   build-macos-x64:
     runs-on: macos-15-intel
