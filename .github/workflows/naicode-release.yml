@@ -217,8 +217,8 @@ jobs:
           # Sandbox helpers: the runtime looks for these next to the main exe or
           # under codex-resources/; without them Windows sandboxing fails with
           # orchestrator_helper_launch_failed (program not found).
-          cp target/x86_64-pc-windows-msvc/release/codex-windows-sandbox-setup.exe dist/codex-package/codex-resources/
-          cp target/x86_64-pc-windows-msvc/release/codex-command-runner.exe dist/codex-package/codex-resources/
+          cp target/x86_64-pc-windows-msvc/release/naicode-windows-sandbox-setup.exe dist/codex-package/codex-resources/
+          cp target/x86_64-pc-windows-msvc/release/naicode-command-runner.exe dist/codex-package/codex-resources/
           tar -czf "dist/codex-package-${ver}-x86_64-pc-windows-msvc.tar.gz" \
             -C dist/codex-package .
       - uses: actions/upload-artifact@v4
