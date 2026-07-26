@@ -283,7 +283,11 @@ jobs:
             fi
           }
           version="${RELEASE_TAG#rust-v}"
-          publish_tarball "dist/npm/codex-npm-${version}.tgz"
-          for tarball in dist/npm/codex-npm-darwin-*.tgz dist/npm/codex-npm-win32-*.tgz; do
+          # Publish every platform package first, then the main package. The
+          # main package's optionalDependencies pin exact platform versions, so
+          # publishing it last closes the window where npm silently skips a
+          # platform package that is not on the registry yet.
+          for tarball in dist/npm/codex-npm-darwin-*.tgz dist/npm/codex-npm-linux-*.tgz dist/npm/codex-npm-win32-*.tgz; do
             publish_tarball "$tarball"
           done
+          publish_tarball "dist/npm/codex-npm-${version}.tgz"
