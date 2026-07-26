@@ -65,6 +65,9 @@ jobs:
           mkdir -p dist/codex-package/bin
           cp target/x86_64-unknown-linux-musl/release/codex dist/codex-package/bin/naicode
           cp target/x86_64-unknown-linux-musl/release/naicode-code-mode-host dist/codex-package/bin/
+          # The release profile keeps debug line tables (strip = false); strip
+          # here or the npm tarball blows past the registry size limit.
+          strip dist/codex-package/bin/naicode dist/codex-package/bin/naicode-code-mode-host
           tar -czf "dist/codex-package-${ver}-x86_64-unknown-linux-musl.tar.gz" \
             -C dist/codex-package .
       - uses: actions/upload-artifact@v4
@@ -103,6 +106,8 @@ jobs:
           mkdir -p dist/codex-package/bin
           cp target/aarch64-unknown-linux-musl/release/codex dist/codex-package/bin/naicode
           cp target/aarch64-unknown-linux-musl/release/naicode-code-mode-host dist/codex-package/bin/
+          # See x64 job: strip debug line tables to stay under npm's size limit.
+          strip dist/codex-package/bin/naicode dist/codex-package/bin/naicode-code-mode-host
           tar -czf "dist/codex-package-${ver}-aarch64-unknown-linux-musl.tar.gz" \
             -C dist/codex-package .
       - uses: actions/upload-artifact@v4
