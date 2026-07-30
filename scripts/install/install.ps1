@@ -800,7 +800,19 @@ try {
 
             Write-Step "正在下载 NaiCode（约 330MB，请耐心等待）"
             $expectedPackageDigest = $packageMetadata.Sha256
-            Invoke-WebRequest -Uri $packageMetadata.Url -OutFile $archivePath
+            # curl.exe (built into Windows 10+) supports resumable downloads and
+            # handles redirects more reliably than Invoke-WebRequest on flaky
+            # connections. Fall back to Invoke-WebRequest if curl is not found.
+            if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+                $curlResult = curl.exe --location --fail --continue-at - `
+                    --retry 5 --retry-delay 3 --retry-connrefused `
+                    --output $archivePath $packageMetadata.Url
+                if ($LASTEXITCODE -ne 0) {
+                    throw "curl 下载失败（exit $LASTEXITCODE），请检查网络后重试。"
+                }
+            } else {
+                Invoke-WebRequest -Uri $packageMetadata.Url -OutFile $archivePath
+            }
             Write-Step "正在校验下载文件"
             Test-ArchiveDigest -ArchivePath $archivePath -ExpectedDigest $expectedPackageDigest
 
