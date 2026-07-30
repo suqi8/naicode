@@ -241,7 +241,17 @@ release_url_for_asset() {
   asset="$1"
   resolved_version="$2"
 
-  printf '%s/releases/download/rust-v%s/%s\n' "$BASE_URL" "$resolved_version" "$asset"
+  # codex-package-* archives are stored directly on the distribution server.
+  # This avoids GitHub's slow/blocked CDN for users in China. npm tarballs
+  # (codex-npm-*) still redirect to GitHub via the /releases/download/ path.
+  case "$asset" in
+    codex-package-*)
+      printf '%s/pkg/naicode/%s/%s\n' "$BASE_URL" "$resolved_version" "$asset"
+      ;;
+    *)
+      printf '%s/releases/download/rust-v%s/%s\n' "$BASE_URL" "$resolved_version" "$asset"
+      ;;
+  esac
 }
 
 release_metadata_url() {

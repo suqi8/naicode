@@ -800,18 +800,24 @@ try {
 
             Write-Step "正在下载 NaiCode（约 330MB，请耐心等待）"
             $expectedPackageDigest = $packageMetadata.Sha256
-            # curl.exe (built into Windows 10+) supports resumable downloads and
-            # handles redirects more reliably than Invoke-WebRequest on flaky
-            # connections. Fall back to Invoke-WebRequest if curl is not found.
+            # codex-package-* archives are hosted directly on the distribution
+            # server to avoid GitHub's slow/blocked CDN in China. npm tarballs
+            # still come from GitHub via the /releases/download/ redirect.
+            $downloadUri = if ($packageAsset -like "codex-package-*") {
+                "$BaseUrl/pkg/naicode/$resolvedVersion/$packageAsset"
+            } else {
+                $packageMetadata.Url
+            }
+            # curl.exe (Windows 10+) supports --continue-at for resumable downloads.
             if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
                 $curlResult = curl.exe --location --fail --continue-at - `
                     --retry 5 --retry-delay 3 --retry-connrefused `
-                    --output $archivePath $packageMetadata.Url
+                    --output $archivePath $downloadUri
                 if ($LASTEXITCODE -ne 0) {
                     throw "curl 下载失败（exit $LASTEXITCODE），请检查网络后重试。"
                 }
             } else {
-                Invoke-WebRequest -Uri $packageMetadata.Url -OutFile $archivePath
+                Invoke-WebRequest -Uri $downloadUri -OutFile $archivePath
             }
             Write-Step "正在校验下载文件"
             Test-ArchiveDigest -ArchivePath $archivePath -ExpectedDigest $expectedPackageDigest
